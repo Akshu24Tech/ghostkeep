@@ -8,12 +8,14 @@ Welcome to the **Ghostkeep Knowledge Base & Obsidian Brain**. This vault contain
 
 ```mermaid
 graph TD
-    Index["Ghostkeep Brain (Index)"] --> Concepts["Concepts"]
-    Index --> Architecture["Architecture"]
-    Index --> Comparisons["Comparisons"]
-    Index --> Ideas["Ideas & Roadmap"]
-    Index --> Articles["Articles & Research"]
+    Index["Ghostkeep Brain (Index)"] --> Specs["🎯 Specs & Problems"]
+    Index --> Concepts["💡 Concepts"]
+    Index --> Architecture["🏛️ Architecture"]
+    Index --> Comparisons["⚖️ Comparisons"]
+    Index --> Ideas["🚀 Ideas & Roadmap"]
+    Index --> Articles["📄 Articles & Research"]
 
+    Specs --> Sync["[[cross-surface-agent-sync|Cross-Surface Sync (Terminal vs IDE)]]"]
     Concepts --> Prov["[[provenance-tracking|Provenance Tracking]]"]
     Concepts --> VecLess["[[vectorless-memory|Vectorless Memory]]"]
     Concepts --> Conf["[[conflict-detection-and-resolution|Conflict Resolution]]"]
@@ -32,6 +34,9 @@ graph TD
 ---
 
 ## 📚 Vault Navigation
+
+### 🎯 Flagship Problem & Specifications
+- **[[cross-surface-agent-sync]]**: Solving the **Terminal CLI (`agy`) vs IDE Agent Amnesia**. When you use the same account on the same repo, but the terminal agent and the IDE agent have no awareness of each other. How Ghostkeep acts as the shared brain & real-time provenance bus.
 
 ### 1. 💡 Core Concepts
 - [[provenance-tracking]]: Why provenance is the missing dimension in agent memory. W3C PROV lineage, session IDs, and derivation ancestry.
