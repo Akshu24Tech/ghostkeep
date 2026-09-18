@@ -31,3 +31,6 @@ htmlcov/
 Thumbs.db
 .idea/
 .vscode/
+brain/.obsidian/workspace.json
+brain/.obsidian/workspace-mobile.json
+
