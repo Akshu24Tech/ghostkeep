@@ -20,9 +20,11 @@ graph TD
     Concepts --> VecLess["[[vectorless-memory|Vectorless Memory]]"]
     Concepts --> Conf["[[conflict-detection-and-resolution|Conflict Resolution]]"]
     Concepts --> MCP["[[mcp-memory-protocol|MCP Memory Protocol]]"]
+    Concepts --> Jev["[[jev-system-one-decisions|Jev & System One Decisions]]"]
 
     Architecture --> Storage["[[storage-engine|Storage Engine]]"]
     Architecture --> Lifecycle["[[lifecycle-of-a-fact|Lifecycle of a Fact]]"]
+    Architecture --> Sieve["[[jev-powered-ambient-sieve|Jev-Powered Ambient Sieve]]"]
 
     Comparisons --> VsTrad["[[ghostkeep-vs-traditional-memory|Ghostkeep vs Traditional Memory]]"]
     Comparisons --> Dream["[[ghostkeep-and-dreamkeeper|Ghostkeep & DreamKeeper]]"]
@@ -43,10 +45,12 @@ graph TD
 - [[vectorless-memory]]: Why plain JSON and file-backed stores outperform opaque vector databases for ground truth and explainability.
 - [[conflict-detection-and-resolution]]: Zero silent overwrites. How contradictions across multi-agent sessions are detected, staged, and resolved.
 - [[mcp-memory-protocol]]: Unifying cross-client agent memory across Claude Desktop, Cursor, Windsurf, Claude Code, and Gemini CLI.
+- [[jev-system-one-decisions]]: How TypeSafe's Jev model introduces non-autoregressive, RLCD-calibrated micro-decisions to agent memory.
 
 ### 2. 🏛️ Architecture & Internals
 - [[storage-engine]]: Anatomy of `facts.json`, `conflicts.json`, and the append-only `provenance.jsonl` audit ledger.
 - [[lifecycle-of-a-fact]]: From creation (`add_memory`), conflict detection, and search retrieval, to resolution and supersession.
+- [[jev-powered-ambient-sieve]]: Upgrading `store.py` with 70ms semantic conflict detection and filtering out 95% of transcript noise.
 
 ### 3. ⚖️ Comparisons & Ecosystem
 - [[ghostkeep-vs-traditional-memory]]: Direct comparison with Mem0, Supermemory, Echo, and native vendor memory.
