@@ -8,12 +8,18 @@ Welcome to the **Ghostkeep Knowledge Base & Obsidian Brain**. This vault contain
 
 ```mermaid
 graph TD
-    Index["Ghostkeep Brain (Index)"] --> Specs["🎯 Specs & Problems"]
+    Index["Ghostkeep Brain (Index)"] --> Guide["📖 Engineering Manual"]
+    Index --> Specs["🎯 Specs & Problems"]
     Index --> Concepts["💡 Concepts"]
     Index --> Architecture["🏛️ Architecture"]
     Index --> Comparisons["⚖️ Comparisons"]
     Index --> Ideas["🚀 Ideas & Roadmap"]
     Index --> Articles["📄 Articles & Research"]
+
+    Guide --> G1["[[01-system-overview-and-purpose|1. Overview & Purpose]]"]
+    Guide --> G2["[[02-component-deep-dive|2. Component Deep Dive]]"]
+    Guide --> G3["[[03-io-contracts-and-schemas|3. I/O Contracts & Schemas]]"]
+    Guide --> G4["[[04-developer-workflow-and-setup|4. Workflow & Setup]]"]
 
     Specs --> Sync["[[cross-surface-agent-sync|Cross-Surface Sync (Terminal vs IDE)]]"]
     Concepts --> Prov["[[provenance-tracking|Provenance Tracking]]"]
@@ -36,6 +42,12 @@ graph TD
 ---
 
 ## 📚 Vault Navigation
+
+### 📖 Complete Project Manual & Codebase Guide
+- **[[01-system-overview-and-purpose]]**: Why Ghostkeep exists, solving cross-surface agent amnesia, and the 3-Tier memory sieve model.
+- **[[02-component-deep-dive]]**: Module-by-module breakdown of `store.py`, `sieve.py`, `scribe.py`, `server.py`, and `cli.py`.
+- **[[03-io-contracts-and-schemas]]**: Exact JSON storage schemas, Sieve signatures, real terminal outputs, and MCP JSON-RPC payloads.
+- **[[04-developer-workflow-and-setup]]**: Setup runbook, Claude Desktop / Cursor MCP configs, testing guide, and troubleshooting.
 
 ### 🎯 Flagship Problem & Specifications
 - **[[cross-surface-agent-sync]]**: Solving the **Terminal CLI (`agy`) vs IDE Agent Amnesia**. When you use the same account on the same repo, but the terminal agent and the IDE agent have no awareness of each other. How Ghostkeep acts as the shared brain & real-time provenance bus.
