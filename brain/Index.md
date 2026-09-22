@@ -34,6 +34,7 @@ graph TD
 
     Comparisons --> VsTrad["[[ghostkeep-vs-traditional-memory|Ghostkeep vs Traditional Memory]]"]
     Comparisons --> Dream["[[ghostkeep-and-dreamkeeper|Ghostkeep & DreamKeeper]]"]
+    Comparisons --> Graphiti["[[graphiti-vs-mem0-vs-ghostkeep|Graphiti vs Mem0 vs Ghostkeep]]"]
 
     Ideas --> Roadmap["[[future-roadmap|Future Roadmap & Ideas]]"]
     Articles --> Research["[[provenance-in-agentic-systems|Provenance in Agentic Systems]]"]
@@ -67,6 +68,7 @@ graph TD
 ### 3. ⚖️ Comparisons & Ecosystem
 - [[ghostkeep-vs-traditional-memory]]: Direct comparison with Mem0, Supermemory, Echo, and native vendor memory.
 - [[ghostkeep-and-dreamkeeper]]: How Ghostkeep acts as the canonical source-of-truth while DreamKeeper performs background consolidation ("dreaming").
+- [[graphiti-vs-mem0-vs-ghostkeep]]: Deep teardown of Graphiti's 4-stage `add_episode` pipeline, Mem0's entity-linking trade-offs, write amplification costs, and LOCOMO benchmark vulnerabilities.
 
 ### 4. 🚀 Research & Future Horizons
 - [[future-roadmap]]: Ideas for semantic diffing, temporal confidence decay, and multi-agent consensus voting.
