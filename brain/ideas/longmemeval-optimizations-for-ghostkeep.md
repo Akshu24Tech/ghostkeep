@@ -1,6 +1,7 @@
 # LongMemEval Memory Optimizations: Roadmap & Blueprint for Ghostkeep
 
-> **Context:** Architectural translation of the ICLR 2025 LongMemEval benchmark optimizations (Value Decomposition, Key Expansion $K=V+\text{fact}$, Temporal Scoping, and JSON + Chain-of-Note Reading) into Ghostkeep's real-time, cross-surface memory engine.
+> **Context:** Architectural translation of the ICLR 2025 LongMemEval benchmark optimizations (Value Decomposition, Key Expansion $K=V+\text{fact}$, Temporal Scoping, and JSON + Chain-of-Note Reading) into Ghostkeep's real-time, cross-surface memory engine.  
+> 📄 **Local Source PDF:** [LongMemEval-Benchmarking-Chat-Assistants-on-Long-Term-Interactive-Memory.pdf](file:///e:/Ghost%20OS/projects/ghostkeep/brain/articles/LongMemEval-Benchmarking-Chat-Assistants-on-Long-Term-Interactive-Memory.pdf)
 
 ---
 
