@@ -37,6 +37,7 @@ graph TD
     Comparisons --> Graphiti["[[graphiti-vs-mem0-vs-ghostkeep|Graphiti vs Mem0 vs Ghostkeep]]"]
 
     Ideas --> Roadmap["[[future-roadmap|Future Roadmap & Ideas]]"]
+    Ideas --> LongMemOpt["[[longmemeval-optimizations-for-ghostkeep|LongMemEval Memory Optimizations]]"]
     Articles --> Research["[[provenance-in-agentic-systems|Provenance in Agentic Systems]]"]
 ```
 
@@ -72,6 +73,7 @@ graph TD
 
 ### 4. 🚀 Research & Future Horizons
 - [[future-roadmap]]: Ideas for semantic diffing, temporal confidence decay, and multi-agent consensus voting.
+- [[longmemeval-optimizations-for-ghostkeep]]: Translating the 4 LongMemEval ICLR 2025 control points (Execution Rounds, Key expansion $K=V+\text{fact}$, Temporal scoping, JSON+Chain-of-Note) into Ghostkeep's real-time engine.
 - [[provenance-in-agentic-systems]]: Literature review and industry analysis on agent memory degeneration, hallucination cascades, and auditability.
 
 ---
