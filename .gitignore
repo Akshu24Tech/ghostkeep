@@ -34,3 +34,8 @@ Thumbs.db
 # Obsidian volatile workspace state
 brain/.obsidian/workspace.json
 brain/.obsidian/workspace-mobile.json
+
+# Local runtime logs
+events.jsonl
+phase0/events.jsonl
+*.log

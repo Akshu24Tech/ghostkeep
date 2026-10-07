@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python /ABSOLUTE/PATH/TO/phase0/hook.py --agent claude-code" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "python /ABSOLUTE/PATH/TO/phase0/hook.py --agent claude-code" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "python /ABSOLUTE/PATH/TO/phase0/hook.py --agent claude-code" } ] }
+    ]
+  }
+}
