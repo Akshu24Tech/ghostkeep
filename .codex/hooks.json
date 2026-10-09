@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"E:/Ghost OS/projects/ghostkeep/phase0/hook.py\" --agent cursor"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"E:/Ghost OS/projects/ghostkeep/phase0/hook.py\" --agent cursor"
+          }
+        ]
+      }
+    ]
+  }
+}
