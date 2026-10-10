@@ -4,6 +4,8 @@ One project memory that every AI agent can read and write: IDE agents, terminal 
 
 Author: Ghost (Akshu Grewal) | Started: 2026-10-06 | Status: Planning done, Phase 0 files ready in phase0/
 
+> Note: `ARCHITECTURE_v2.1.md` supersedes the v2 blueprint where they differ.
+
 ---
 
 ## 1. The idea (simple version)
@@ -142,14 +144,15 @@ Do not add decay until there are enough facts that change over time. Decay on st
 
 ## 6. Roadmap
 
-| Phase | What you build | Done when |
+| Phase | Build | Done when |
 |---|---|---|
-| 0 (2 hrs) | One Claude Code hook posts to the capture endpoint (see `phase0/`) | I can see real event data arrive |
-| 1 | Log, Gemini CLI hook, inject last events at session start, noise filter | A fact from one agent shows up in the other |
-| 2 | Log to markdown notes in a test vault | Graph view is useful, not noise |
-| 3 | Provenance agent runs on a schedule, marks replaced decisions | Old decisions show as replaced |
-| 4 | MCP search, Antigravity and Cursor | Same memory works in 4+ tools |
-| 5 | Review queue, decay, small dashboard | I can approve or reject removals |
+| 1 | Antigravity transcript watcher into the existing log | Real events from a real chat appear in events.jsonl |
+| 2 | Claim extractor, rule-based first (file edits, commands run, explicit decisions) | Log lines turn into unverified or declared rows |
+| 3 | Claims store plus ONE claim end to end | "server listens on 8765" goes unverified, checked, then stale after a change to server.py |
+| 4 | Auditor with the six check types | Checks run on a schedule and on pre-commit |
+| 5 | Generated views: claims_register.md, MEMORY.md, Obsidian notes | Views can be deleted and rebuilt from the log |
+| 6 | Read path into agents (MEMORY.md, then MCP) | A fact from one agent shows up in another |
+| 7 | More agents, review queue for removals | Same memory works in 3 or more tools |
 
 Out of scope for now: capturing arbitrary apps on screen, cloud sync, multi-user teams.
 

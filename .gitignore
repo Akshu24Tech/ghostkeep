@@ -35,7 +35,8 @@ Thumbs.db
 brain/.obsidian/workspace.json
 brain/.obsidian/workspace-mobile.json
 
-# Local runtime logs
+# Local runtime logs and state
 events.jsonl
 phase0/events.jsonl
+phase0/.watcher_state.json
 *.log

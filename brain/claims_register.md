@@ -1,6 +1,7 @@
-# 🧠 Ghostkeep Verifiable Claims Register
+# 🧠 Ghostkeep Verifiable Claims Register (Rendered View)
 
-| Claim ID | Claim | Status | Evidence/Source | Date | Author |
-|:---|:---|:---|:---|:---|:---|
-| C-000 | Initial Claims Register Setup | `Checked` | File created by Adi | 2026-10-09 | System |
-| C-001 | Project Memory Evolution documented | `Checked` | memory_evolution.md | 2026-10-09 | System |
+> Generated from `phase0/claims.jsonl`. Source of truth is the append-only ledger.
+
+| Claim ID | Kind | Claim | Status | Evidence/Source | Hash | Date | Author |
+|:---|:---|:---|:---|:---|:---|:---|:---|
+| C-001 | `verifiable` | server.py listens on port 8765 | `checked` | Matched port 8765 in phase0/server.py (configured in code) | `8d8d36d2` | 2026-10-10 | antigravity |
