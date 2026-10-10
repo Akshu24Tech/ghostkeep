@@ -133,7 +133,23 @@ def verify_claim(claim: dict) -> tuple[str, dict | None, str | None]:
             # File changed since check! Status is STALE.
             return "stale", existing_evidence, f"File {target_rel} hash changed from {recorded_hashes[target_rel][:8]} to {str(current_hash)[:8]}"
 
-    # 2. Port and config inspection
+    # 2. Live port listening check (strict socket test)
+    if check_type == "port_listening":
+        expected_port = claim.get("expected_port", 8765)
+        is_open = check_port_listening(expected_port)
+        current_hash = compute_file_hash(target_path) if target_path else None
+        if is_open:
+            evidence = {
+                "check_type": "port_listening",
+                "result": f"Live socket check passed: TCP port {expected_port} is listening",
+                "file_hashes": {target_rel: current_hash} if target_rel and current_hash else {},
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+            }
+            return "checked", evidence, None
+        else:
+            return "invalid", None, f"Live socket check failed: port {expected_port} is not listening"
+
+    # 3. Port and config inspection
     if check_type in ("port_config", "port_listening_or_config"):
         expected_port = claim.get("expected_port", 8765)
         if not target_path or not target_path.is_file():
@@ -251,10 +267,10 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "seed":
         create_claim(
             claim_id="C-001",
-            text="server.py listens on port 8765",
+            text="server listens on port 8765",
             kind="verifiable",
             target_file="phase0/server.py",
-            check_type="port_config",
+            check_type="port_listening",
             expected_port=8765,
             author="antigravity",
         )

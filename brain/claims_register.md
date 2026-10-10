@@ -4,4 +4,4 @@
 
 | Claim ID | Kind | Claim | Status | Evidence/Source | Hash | Date | Author |
 |:---|:---|:---|:---|:---|:---|:---|:---|
-| C-001 | `verifiable` | server.py listens on port 8765 | `checked` | Matched port 8765 in phase0/server.py (configured in code) | `8d8d36d2` | 2026-10-10 | antigravity |
+| C-001 | `verifiable` | server listens on port 8765 | `checked` | Live socket check passed: TCP port 8765 is listening | `8d8d36d2` | 2026-10-10 | antigravity |
