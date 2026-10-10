@@ -60,38 +60,42 @@ Cursor/IDE  ─┘   (what happened)  └──────┬──────
 
 ---
 
-### Detailed architecture (v2)
+### Detailed architecture (v2.1)
 
 ```
- Claude Code    Gemini CLI    Antigravity    Cursor / IDE
-  (hooks)        (hooks)      (MCP, rules)   (hooks, MCP)
-      │              │              │              │
-      └──────────────┴──────┬───────┴──────────────┘
-                            ▼
-                  ┌───────────────────┐
-                  │   Capture API     │  local daemon, POST /observe
-                  └─────────┬─────────┘
-                            ▼
-                  ┌───────────────────┐
-                  │ Append-only log   │  JSONL or SQLite, never edited
-                  └─────────┬─────────┘
-                            ▼  scheduled
-                  ┌───────────────────┐
-                  │ Decision          │  extract → match → diff → store
-                  │ provenance agent  │
-                  └───┬─────────┬─────┘
-                      ▼         ▼         ▼
-              Review queue  Obsidian vault  MEMORY.md ──┐
-              (human OK)    (graph view)   (agent-read)  │
-                                                         │
-      agents read MEMORY.md at session start ◄───────────┘
+ Claude Code      Cursor / IDE      Antigravity IDE     Gemini CLI
+  (hooks)          (hooks)        (transcript watcher)   (hooks/log)
+     │                │                   │                  │
+     └────────────────┼───────────────────┼──────────────────┘
+                      ▼                   ▼
+           ┌─────────────────────────────────────────┐
+           │ Capture Daemon / Logbook (Append-Only)  │
+           │ events.jsonl - Source of Truth (Ledger) │
+           └────────────────────┬────────────────────┘
+                                │
+                    Extract Claims & Decisions
+                                ▼
+           ┌─────────────────────────────────────────┐
+           │ Claims Engine (3 Claim Kinds)           │
+           │ • Verifiable: Tested by Auditor         │
+           │ • Decision: Declared by Human (no audit)│
+           │ • Preference: Styling & constraints     │
+           └────────────────────┬────────────────────┘
+                                │
+          ┌─────────────────────┴─────────────────────┐
+          ▼                                           ▼
+┌─────────────────────────────────┐       ┌───────────────────────────────┐
+│ Deterministic Auditor (Code)    │       │ Rendered Markdown View        │
+│ Tests file hashes, ports, pytest│       │ brain/claims_register.md      │
+│ Checked → Stale (on hash change)│       │ brain/MEMORY.md               │
+└─────────────────────────────────┘       └───────────────────────────────┘
 ```
 
-Layers: capture and storage (Capture API, log), memory logic and views (provenance agent, review queue, vault, MEMORY.md), existing agents (unchanged).
-
-**Not yet verified**
-- Whether Antigravity exposes hooks. If not, it reads memory only until another write path is found.
-- How noisy raw capture is. One session can produce hundreds of tool events, so Phase 1 needs a filter.
+**Core Guarantees in v2.1:**
+1. **Append-Only Log is Truth:** Never let multiple agents collide rewriting Markdown. The JSONL log is the database; `claims_register.md` is a generated artifact.
+2. **Track C Transcript Watcher:** Background daemon tails Antigravity's live `transcript.jsonl` to capture facts with zero manual prompt habits.
+3. **Deterministic Auditor:** The auditor is plain Python code (AST, greps, exit codes), not an LLM grading its own homework.
+4. **Change-Based Invalidation:** Evidence stores file hashes. When files change, claims transition from `Checked` → `Stale`.
 
 ---
 
