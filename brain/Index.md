@@ -28,6 +28,7 @@ graph TD
     Concepts --> MCP["[[mcp-memory-protocol|MCP Memory Protocol]]"]
     Concepts --> Jev["[[jev-system-one-decisions|Jev & System One Decisions]]"]
     Concepts --> Delib["[[deliberative-decision-provenance|Deliberative Decision Provenance]]"]
+    Concepts --> Loop["[[closed-loop-sdlc-with-ghostkeep|Closed-Loop SDLC with Ghostkeep]]"]
 
     Architecture --> Storage["[[storage-engine|Storage Engine]]"]
     Architecture --> Lifecycle["[[lifecycle-of-a-fact|Lifecycle of a Fact]]"]
@@ -62,6 +63,7 @@ graph TD
 - [[mcp-memory-protocol]]: Unifying cross-client agent memory across Claude Desktop, Cursor, Windsurf, Claude Code, and Gemini CLI.
 - [[jev-system-one-decisions]]: How TypeSafe's Jev model introduces non-autoregressive, RLCD-calibrated micro-decisions to agent memory.
 - [[deliberative-decision-provenance]]: Capturing multi-agent council deliberations (Roast Room model) with per-seat votes, devil's advocacy, dissents, and review triggers.
+- [[closed-loop-sdlc-with-ghostkeep]]: Operationalizing Matt Pocock's 3-skill loop (`/implement-spec`, `/pr`, `/retro`) with an immutable cross-worktree provenance bus and vectorless fact ledger.
 
 ### 2. 🏛️ Architecture & Internals
 - [[storage-engine]]: Anatomy of `facts.json`, `conflicts.json`, and the append-only `provenance.jsonl` audit ledger.
