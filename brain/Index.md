@@ -37,6 +37,7 @@ graph TD
     Comparisons --> VsTrad["[[ghostkeep-vs-traditional-memory|Ghostkeep vs Traditional Memory]]"]
     Comparisons --> Dream["[[ghostkeep-and-dreamkeeper|Ghostkeep & DreamKeeper]]"]
     Comparisons --> Graphiti["[[graphiti-vs-mem0-vs-ghostkeep|Graphiti vs Mem0 vs Ghostkeep]]"]
+    Comparisons --> GKC["[[ghostkeep-and-google-knowledge-catalog|Ghostkeep & Google Knowledge Catalog]]"]
 
     Ideas --> Roadmap["[[future-roadmap|Future Roadmap & Ideas]]"]
     Ideas --> LongMemOpt["[[longmemeval-optimizations-for-ghostkeep|LongMemEval Memory Optimizations]]"]
@@ -74,6 +75,7 @@ graph TD
 - [[ghostkeep-vs-traditional-memory]]: Direct comparison with Mem0, Supermemory, Echo, and native vendor memory.
 - [[ghostkeep-and-dreamkeeper]]: How Ghostkeep acts as the canonical source-of-truth while DreamKeeper performs background consolidation ("dreaming").
 - [[graphiti-vs-mem0-vs-ghostkeep]]: Deep teardown of Graphiti's 4-stage `add_episode` pipeline, Mem0's entity-linking trade-offs, write amplification costs, and LOCOMO benchmark vulnerabilities.
+- [[ghostkeep-and-google-knowledge-catalog]]: How Google Cloud's Knowledge Catalog & Context Sets validate Ghostkeep's local-first architecture (trace mining, vectorless facts, conflict staging, and MCP).
 
 ### 4. 🚀 Research & Future Horizons
 - [[future-roadmap]]: Ideas for semantic diffing, temporal confidence decay, and multi-agent consensus voting.
