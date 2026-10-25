@@ -12,11 +12,13 @@ import os
 import re
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 DEFAULT_BRAIN_DIR = Path.home() / ".gemini" / "antigravity-ide" / "brain"
 DEFAULT_STATE_FILE = Path(__file__).parent / ".watcher_state.json"
+CONFIG_FILE = Path(__file__).parent / "config.json"
 SERVER_URL = os.environ.get("MEMORY_URL", "http://127.0.0.1:8765/observe")
 
 # Types to drop (noisy system meta/artifacts)
@@ -27,6 +29,66 @@ DROP_TYPES = {
     "CONVERSATION_HISTORY",
     "GENERIC",
 }
+
+
+def load_config() -> dict:
+    if CONFIG_FILE.exists():
+        try:
+            with CONFIG_FILE.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"allowed_roots": [r"E:\Ghost OS\projects\ghostkeep"]}
+
+
+def user_input_has_path(text: str) -> bool:
+    """Check if a user prompt mentions a specific file or folder path."""
+    path_patterns = [
+        r"[a-zA-Z]:[\\/]",                                                        # Full drive path
+        r"\b[\w.-]+[\\/][\w.-]+",                                                 # Subdirectory/file path
+        r"\b[\w.-]+\.(py|md|json|jsonl|txt|toml|yaml|yml|html|css|js|ts|sh)\b",   # File with extension
+        r"\b(brain|phase0|tests|ghostkeep)\b",                                   # Project directories
+    ]
+    for pat in path_patterns:
+        if re.search(pat, text, re.IGNORECASE):
+            return True
+    return False
+
+
+DECISION_PATTERNS = [
+    r"\blet'?s\s+(?:use|work)\b",
+    r"\bwe\s+will\s+use\b",
+    r"\bwe'?ll\s+use\b",
+    r"\bdecided\b",
+    r"\bdecision\b",
+    r"\bdecisions\b",
+    r"\binstead\s+of\b",
+    r"\bdon'?t\s+(?:use|build)\b",
+    r"\bdo\s+not\s+(?:use|invent|change)\b",
+    r"\bsupersedes\b",
+    r"\bwe\s+should\s+use\b",
+    r"\bswitch\s+to\b",
+]
+
+PREFERENCE_PATTERNS = [
+    r"\balways\b",
+    r"\bnever\b",
+    r"\bprefer\b",
+    r"\bpreference\b",
+    r"\bfrom\s+now\s+on\b",
+    r"\bonly\s+when\b",
+]
+
+
+def touches_allowed_root(data: dict, allowed_roots: list[str]) -> bool:
+    """Check if an event touches any path within the allowed roots (full path match only)."""
+    dumped = json.dumps(data, ensure_ascii=False).replace("\\\\", "/").replace("\\", "/").lower()
+    dumped = urllib.parse.unquote(dumped)
+    for root in allowed_roots:
+        norm_root = str(Path(root)).replace("\\", "/").lower()
+        if norm_root in dumped:
+            return True
+    return False
 
 
 def find_latest_transcript(brain_dir: Path) -> tuple[Path, str] | None:
@@ -51,7 +113,7 @@ def find_latest_transcript(brain_dir: Path) -> tuple[Path, str] | None:
 
 
 def sanitize_text(text: str, max_len: int = 800) -> str:
-    """Remove potential secrets or tokens and truncate overly long chunks."""
+    """Remove potential secrets or tokens, scrub leaked external markers, and truncate overly long chunks."""
     if not text:
         return ""
     # Redact common token patterns (GitHub tokens, bearer headers, api keys)
@@ -59,6 +121,10 @@ def sanitize_text(text: str, max_len: int = 800) -> str:
     redacted = re.sub(r"(AIza[0-9A-Za-z-_]{35})", "[REDACTED_API_KEY]", redacted)
     # Redact .env variable values if accidentally present
     redacted = re.sub(r'(?i)(api[_-]?key|secret|password|token)\s*=\s*[^\s]+', r'\1=[REDACTED]', redacted)
+    # Redact external project leaks & metadata strings
+    redacted = re.sub(r"(?i)\b(HiScholar|IRINFOTECH)\b", "[OTHER_PROJECT]", redacted)
+    redacted = re.sub(r"ADDITIONAL_METADATA", "[METADATA]", redacted)
+    redacted = re.sub(r"\.env", "[CONFIG_ENV]", redacted)
     redacted = redacted.strip()
     if len(redacted) > max_len:
         return redacted[:max_len] + "... [truncated]"
@@ -67,11 +133,17 @@ def sanitize_text(text: str, max_len: int = 800) -> str:
 
 def clean_summary_for_type(step_type: str, raw_content: str, tool_name: str | None) -> str | None:
     """Filter noise and format clean summaries per event type."""
-    # 1. USER_INPUT: strip <ADDITIONAL_METADATA> and request tags
+    # Always strip any leaked ADDITIONAL_METADATA block from any event type
+    raw_content = re.sub(r"<ADDITIONAL_METADATA>[\s\S]*?</ADDITIONAL_METADATA>", "", raw_content).strip()
+
+    # 1. USER_INPUT: strip request tags and setting changes
     if step_type == "USER_INPUT":
-        cleaned = re.sub(r"<ADDITIONAL_METADATA>[\s\S]*?</ADDITIONAL_METADATA>", "", raw_content).strip()
-        cleaned = re.sub(r"^<USER_REQUEST>\s*", "", cleaned)
-        cleaned = re.sub(r"\s*</USER_REQUEST>$", "", cleaned).strip()
+        m_req = re.search(r"<USER_REQUEST>([\s\S]*?)</USER_REQUEST>", raw_content)
+        if m_req:
+            cleaned = m_req.group(1).strip()
+        else:
+            cleaned = re.sub(r"^<USER_REQUEST>\s*", "", raw_content)
+            cleaned = re.sub(r"\s*</USER_REQUEST>$", "", cleaned).strip()
         return sanitize_text(cleaned, max_len=600)
 
     # 2. VIEW_FILE: extract only the file path, never file contents
@@ -129,14 +201,18 @@ def process_new_lines(transcript_path: Path, conv_id: str, state_file: Path, sta
     """Read newly appended lines from transcript and post deduplicated events via the server."""
     file_key = str(transcript_path.resolve())
     last_line_index = state.get(file_key, 0)
-
-    # Maintain a set of recent dedupe hashes in state
     seen_hashes = set(state.get("seen_hashes", []))
 
     if not transcript_path.exists():
         return 0
 
+    cfg = load_config()
+    allowed_roots = cfg.get("allowed_roots", [r"E:\Ghost OS\projects\ghostkeep"])
+
     count = 0
+    dropped_user_inputs = 0
+    dropped_outside_root = 0
+
     with transcript_path.open("r", encoding="utf-8", errors="replace") as f:
         for idx, line in enumerate(f):
             if idx < last_line_index:
@@ -179,6 +255,45 @@ def process_new_lines(transcript_path: Path, conv_id: str, state_file: Path, sta
                 save_state(state_file, state)
                 continue
 
+            event_project = "ghostkeep"
+
+            # Filter: USER_INPUT handling & allowed root enforcement
+            if step_type == "USER_INPUT":
+                text_to_check = summary or raw_content
+                has_path = user_input_has_path(text_to_check)
+                has_decision_or_pref = any(
+                    re.search(pat, text_to_check, re.IGNORECASE)
+                    for pat in DECISION_PATTERNS + PREFERENCE_PATTERNS
+                )
+
+                if not has_path:
+                    if has_decision_or_pref:
+                        # Pathless input with decision/preference wording -> keep and flag project unknown
+                        event_project = "unknown"
+                    else:
+                        # Drop other pathless inputs
+                        dropped_user_inputs += 1
+                        last_line_index = idx + 1
+                        state[file_key] = last_line_index
+                        save_state(state_file, state)
+                        continue
+                else:
+                    # Has path -> must touch allowed root
+                    if not touches_allowed_root(data, allowed_roots):
+                        dropped_outside_root += 1
+                        last_line_index = idx + 1
+                        state[file_key] = last_line_index
+                        save_state(state_file, state)
+                        continue
+            else:
+                # All other events must touch allowed root
+                if not touches_allowed_root(data, allowed_roots):
+                    dropped_outside_root += 1
+                    last_line_index = idx + 1
+                    state[file_key] = last_line_index
+                    save_state(state_file, state)
+                    continue
+
             # Rule 2: Compute robust dedupe key
             dedupe_payload = f"{conv_id}:{step_type}:{source_ts}:{raw_content[:200]}"
             dedupe_key = hashlib.sha256(dedupe_payload.encode("utf-8")).hexdigest()
@@ -194,7 +309,7 @@ def process_new_lines(transcript_path: Path, conv_id: str, state_file: Path, sta
             event = {
                 "agent": "antigravity",
                 "conversation_id": conv_id,
-                "project": None,
+                "project": event_project,
                 "event": step_type,
                 "step_index": step_idx,
                 "source_ts": source_ts,
@@ -214,9 +329,13 @@ def process_new_lines(transcript_path: Path, conv_id: str, state_file: Path, sta
 
             # Rule 1: Save state immediately after processing each record
             state[file_key] = last_line_index
-            # Keep seen_hashes bounded (last 2000)
             state["seen_hashes"] = list(seen_hashes)[-2000:]
             save_state(state_file, state)
+
+    if dropped_user_inputs > 0:
+        print(f"Dropped {dropped_user_inputs} USER_INPUT event(s) naming no path.")
+    if dropped_outside_root > 0:
+        print(f"Dropped {dropped_outside_root} event(s) outside allowed roots.")
 
     return count
 

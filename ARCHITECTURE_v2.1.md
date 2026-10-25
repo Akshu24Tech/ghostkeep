@@ -16,8 +16,9 @@ One line: memory is a register of claims. Whoever writes a claim never decides w
 | 3 | Every claim goes to the auditor | Three claim kinds. Only verifiable claims are audited | A decision such as "we chose SQLite" has no test to run |
 | 4 | Checked is never flagged at any age | Checked goes stale when its evidence changes, not when time passes | A claim true at one commit can be false ten commits later |
 | 5 | Auditor agent verifies | Auditor is code. An LLM may propose a check but never sets a status | Otherwise the hallucination just moves |
+| 6 | Retrieval accuracy assumed as trust | **Applicability Gate & Structured Evidence Records** (Rohit Bhardwaj) | An accurately quoted claim/runbook may not be entitled to govern this target environment or commit |
 
-Kept from v2: writer and checker are decoupled, nothing is deleted, old is not wrong, one source of truth for all agents.
+Kept from v2: writer and checker are decoupled, nothing is deleted, old is not wrong, one source of truth for all agents. Never resolve conflicts silently by recency.
 
 ---
 

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Shared Agent Memory - Verifiable Claims Visual</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #080b11;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+      padding: 40px;
+    }
+    .canvas {
+      width: 1080px;
+      height: 810px;
+      background: radial-gradient(circle at 50% 0%, #151d2f 0%, #090d16 100%);
+      border: 1px solid #1e293b;
+      border-radius: 24px;
+      padding: 64px 72px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      position: relative;
+      overflow: hidden;
+    }
+    .canvas::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 15%;
+      right: 15%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.4), transparent);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .tag {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      display: inline-block;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 38px;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    .subtitle {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-top: 8px;
+    }
+    .meta-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      color: #64748b;
+      background: #0f172a;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+    }
+
+    /* Main Table Card */
+    .card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      overflow: hidden;
+      margin: 28px 0;
+    }
+    .card-header {
+      display: grid;
+      grid-template-columns: 80px 1fr 180px 130px;
+      padding: 16px 24px;
+      background: rgba(30, 41, 59, 0.4);
+      border-bottom: 1px solid #1e293b;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 80px 1fr 180px 130px;
+      padding: 20px 24px;
+      border-bottom: 1px solid #1e293b;
+      align-items: center;
+      transition: background 0.2s;
+    }
+    .row:last-child {
+      border-bottom: none;
+    }
+    .col-id {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .col-text {
+      font-size: 16px;
+      color: #f1f5f9;
+      font-weight: 500;
+      padding-right: 20px;
+    }
+    .col-evidence {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 13px;
+      color: #64748b;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 6px 14px;
+      border-radius: 6px;
+      width: fit-content;
+    }
+    .badge-checked {
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .badge-stale {
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+    .badge-declared {
+      color: #60a5fa;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+    }
+
+    /* Footer */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid #1e293b;
+    }
+    .principles {
+      display: flex;
+      gap: 32px;
+    }
+    .principle-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #94a3b8;
+      font-weight: 500;
+    }
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #38bdf8;
+    }
+    .author-note {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 13px;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div>
+      <div class="header">
+        <div>
+          <span class="tag">Shared Agent Memory</span>
+          <h1>From Chat Logs to Verifiable Claims</h1>
+          <p class="subtitle">Replacing noisy conversational memory with deterministic truth.</p>
+        </div>
+        <div class="meta-badge">
+          ledger: claims.jsonl
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>ID</div>
+          <div>Claim / Fact</div>
+          <div>Grounding Evidence</div>
+          <div>Status</div>
+        </div>
+
+        <div class="row">
+          <div class="col-id">C-001</div>
+          <div class="col-text">server.py is configured for port 8765</div>
+          <div class="col-evidence">SHA: 8d8d36d2</div>
+          <div><span class="badge badge-checked">CHECKED</span></div>
+        </div>
+
+        <div class="row">
+          <div class="col-id">C-002</div>
+          <div class="col-text">server is listening on 8765</div>
+          <div class="col-evidence">10m runtime window</div>
+          <div><span class="badge badge-stale">STALE</span></div>
+        </div>
+
+        <div class="row">
+          <div class="col-id">C-004</div>
+          <div class="col-text">Do not invent a config format.</div>
+          <div class="col-evidence">User constraint</div>
+          <div><span class="badge badge-declared">DECLARED</span></div>
+        </div>
+
+        <div class="row">
+          <div class="col-id">C-009</div>
+          <div class="col-text">commit 35d3235 exists on origin/main</div>
+          <div class="col-evidence">Git SHA check</div>
+          <div><span class="badge badge-checked">CHECKED</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="principles">
+        <div class="principle-item"><div class="dot"></div>Deterministic hash verification</div>
+        <div class="principle-item"><div class="dot"></div>Runtime state decays over time</div>
+        <div class="principle-item"><div class="dot"></div>Epistemic debt over silent deletion</div>
+      </div>
+      <div class="author-note">
+        Phase 0 Spike
+      </div>
+    </div>
+  </div>
+</body>
+</html>

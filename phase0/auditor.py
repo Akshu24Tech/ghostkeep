@@ -11,8 +11,9 @@ import hashlib
 import json
 import re
 import socket
+import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -122,34 +123,51 @@ def verify_claim(claim: dict) -> tuple[str, dict | None, str | None]:
     target_rel = claim.get("target_file")
     target_path = (ROOT_DIR / target_rel) if target_rel else None
 
-    # 1. Staleness check: If already Checked, has any evidence file changed?
+    # 1. Staleness check: If already Checked, has any content-dependent evidence file changed?
     current_status = claim.get("status")
     existing_evidence = claim.get("evidence") or {}
     recorded_hashes = existing_evidence.get("file_hashes", {})
 
-    if current_status == "checked" and target_path and target_rel in recorded_hashes:
+    # Only content-dependent claims (not file_exists) check file hashes
+    if check_type != "file_exists" and current_status == "checked" and target_path and target_rel in recorded_hashes:
         current_hash = compute_file_hash(target_path)
         if current_hash != recorded_hashes[target_rel]:
             # File changed since check! Status is STALE.
             return "stale", existing_evidence, f"File {target_rel} hash changed from {recorded_hashes[target_rel][:8]} to {str(current_hash)[:8]}"
 
-    # 2. Live port listening check (strict socket test)
+    # 2. Live port listening check (runtime claim with 10-minute expiry)
     if check_type == "port_listening":
         expected_port = claim.get("expected_port", 8765)
+        now_dt = datetime.now(timezone.utc)
+
+        # Check expiry first if currently checked
+        if current_status == "checked":
+            verified_at_str = existing_evidence.get("verified_at")
+            if verified_at_str:
+                try:
+                    verified_dt = datetime.fromisoformat(verified_at_str)
+                    age_seconds = (now_dt - verified_dt).total_seconds()
+                    if age_seconds > 600:
+                        return "stale", existing_evidence, f"Runtime claim expired after {int(age_seconds)}s (> 10m expiry limit)"
+                except Exception:
+                    pass
+
         is_open = check_port_listening(expected_port)
-        current_hash = compute_file_hash(target_path) if target_path else None
         if is_open:
             evidence = {
                 "check_type": "port_listening",
                 "result": f"Live socket check passed: TCP port {expected_port} is listening",
-                "file_hashes": {target_rel: current_hash} if target_rel and current_hash else {},
-                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "verified_at": now_dt.isoformat(),
+                "expires_at": (now_dt + timedelta(seconds=600)).isoformat(),
             }
             return "checked", evidence, None
         else:
+            # When server stops listening, if previously checked it becomes stale, not invalid
+            if current_status == "checked":
+                return "stale", existing_evidence, f"Server stopped listening on port {expected_port}"
             return "invalid", None, f"Live socket check failed: port {expected_port} is not listening"
 
-    # 3. Port and config inspection
+    # 3. Port and config inspection (code claim)
     if check_type in ("port_config", "port_listening_or_config"):
         expected_port = claim.get("expected_port", 8765)
         if not target_path or not target_path.is_file():
@@ -163,11 +181,9 @@ def verify_claim(claim: dict) -> tuple[str, dict | None, str | None]:
         port_match = re.search(port_pattern, content)
 
         if port_match:
-            is_open = check_port_listening(expected_port)
-            status_note = "listening" if is_open else "configured in code"
             evidence = {
                 "check_type": "port_config",
-                "result": f"Matched port {expected_port} in {target_rel} ({status_note})",
+                "result": f"Matched port {expected_port} in {target_rel}",
                 "file_hashes": {target_rel: current_hash},
                 "verified_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -175,18 +191,68 @@ def verify_claim(claim: dict) -> tuple[str, dict | None, str | None]:
         else:
             return "invalid", None, f"Port {expected_port} not found in {target_rel}"
 
-    # 3. File existence check
+    # 4. File existence check (existence only, no content hashes)
     if check_type == "file_exists":
         if target_path and target_path.exists():
-            current_hash = compute_file_hash(target_path)
             evidence = {
                 "check_type": "file_exists",
                 "result": f"File {target_rel} exists",
-                "file_hashes": {target_rel: current_hash} if current_hash else {},
                 "verified_at": datetime.now(timezone.utc).isoformat(),
             }
             return "checked", evidence, None
         return "invalid", None, f"File {target_rel} does not exist"
+
+    # 5. Git commit check on origin/main (git merge-base --is-ancestor)
+    if check_type == "git_commit_on_origin":
+        sha = claim.get("target_sha")
+        if not sha:
+            m = re.search(r"commit\s+([a-f0-9]{7,40})", claim.get("text", ""))
+            sha = m.group(1) if m else None
+
+        if not sha:
+            return "invalid", None, "No git commit SHA found in claim"
+
+        proc = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, "origin/main"],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            evidence = {
+                "check_type": "git_commit_on_origin",
+                "result": f"Commit {sha} verified as ancestor of origin/main",
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+            }
+            return "checked", evidence, None
+        else:
+            return "invalid", None, f"Commit {sha} is not an ancestor of origin/main"
+
+    # 6. Git commit check locally
+    if check_type in ("git_commit", "git_commit_local"):
+        sha = claim.get("target_sha")
+        if not sha:
+            m = re.search(r"commit\s+([a-f0-9]{7,40})", claim.get("text", ""))
+            sha = m.group(1) if m else None
+
+        if not sha:
+            return "invalid", None, "No git commit SHA found in claim"
+
+        proc = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{sha}^{{commit}}"],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            evidence = {
+                "check_type": "git_commit_local",
+                "result": f"Commit {sha} exists in local git repository",
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+            }
+            return "checked", evidence, None
+        else:
+            return "invalid", None, f"Commit {sha} not found in local git repository"
 
     return "unverified", None, "Unknown check type"
 
@@ -267,9 +333,18 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "seed":
         create_claim(
             claim_id="C-001",
-            text="server listens on port 8765",
+            text="server.py is configured for port 8765",
             kind="verifiable",
             target_file="phase0/server.py",
+            check_type="port_config",
+            expected_port=8765,
+            author="antigravity",
+        )
+        create_claim(
+            claim_id="C-002",
+            text="server is listening on 8765",
+            kind="verifiable",
+            target_file=None,
             check_type="port_listening",
             expected_port=8765,
             author="antigravity",
