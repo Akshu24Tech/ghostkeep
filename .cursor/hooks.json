@@ -2,13 +2,13 @@
   "version": 1,
   "hooks": {
     "beforeSubmitPrompt": [
-      { "command": "python \"E:/Ghost OS/projects/ghostkeep/phase0/hook.py\" --agent cursor" }
+      { "command": "python phase0/hook.py --agent cursor" }
     ],
     "afterFileEdit": [
-      { "command": "python \"E:/Ghost OS/projects/ghostkeep/phase0/hook.py\" --agent cursor" }
+      { "command": "python phase0/hook.py --agent cursor" }
     ],
     "stop": [
-      { "command": "python \"E:/Ghost OS/projects/ghostkeep/phase0/hook.py\" --agent cursor" }
+      { "command": "python phase0/hook.py --agent cursor" }
     ]
   }
 }
