@@ -22,6 +22,10 @@ When working on a modern codebase, developers use multiple AI tools:
 2. **Context amnesia & repetition:** You re-explain architectural decisions every time you switch tools.
 3. **Naive vector stores hallucinate:** Vector similarity matches on outdated phrases; when two agents disagree, they either overwrite each other or blend contradictory rules into silent failures.
 
+<p align="center">
+  <img src="./ghostkeep_linkedin_visual.png" alt="Ghostkeep Architecture and Claims Register" width="850">
+</p>
+
 ---
 
 ## 💡 The Solution: A Verified Register of Claims
@@ -29,28 +33,81 @@ When working on a modern codebase, developers use multiple AI tools:
 Ghostkeep enforces a fundamental golden rule:
 > **"Whoever writes a claim never decides whether it is true."**
 
-Instead of trusting agents to self-evaluate, Ghostkeep uses an append-only event ledger and a **deterministic code auditor** (file existence, AST checks, hash verification, live socket checks):
+Instead of trusting agents to self-evaluate, Ghostkeep uses an append-only event ledger and a **deterministic code auditor** (file existence, AST checks, hash verification, live socket checks) backed by an **Applicability Gate**:
 
-```
-Claude Code ─┐
-Cursor       ─┤ Hooks / Watcher     ┌─────────────────────┐
-Gemini CLI   ─┼───────────────────► │   events.jsonl      │ (Append-only source of truth)
-Antigravity  ─┘   (what happened)   └──────────┬──────────┘
-                                               ▼
-                                    ┌─────────────────────┐
-                                    │   Claim Extractor   │ (Proposes claims: unverified)
-                                    └──────────┬──────────┘
-                                               ▼
-                                    ┌─────────────────────┐
-                                    │ Deterministic Code  │ (Hashes, AST, file & socket checks)
-                                    │      Auditor        │ (Sets: checked, stale, invalid)
-                                    └──────────┬──────────┘
-                                               ▼
-                                    ┌─────────────────────┐
-                                    │ Verified MEMORY.md  │ (Rendered concise state view)
-                                    └──────────┬──────────┘
-                                               ▼  Exposed via MCP
-                                       All AI Agents
+```mermaid
+flowchart TD
+    subgraph AgentSurfaces ["🤖 Multi-Agent Development Surfaces"]
+        Cursor["Cursor IDE (Editor)"]
+        Claude["Claude Code (CLI)"]
+        Antigravity["Antigravity / Gemini (Web & Script)"]
+    end
+
+    subgraph Ingestion ["1. Event Ingestion (Passive & Ambient)"]
+        Hooks["IDE Hooks (.cursor/hooks.json)"]
+        Watcher["Watcher (phase0/watcher.py)"]
+        EventsLog[("phase0/events.jsonl<br/>Immutable Append-Only Log")]
+    end
+
+    subgraph Mining ["2. Claim Extraction"]
+        Extractor["phase0/extractor.py<br/>Rule-Based Claim Parser"]
+        ClaimsLedger[("phase0/claims.jsonl<br/>Status: unverified")]
+    end
+
+    subgraph VerificationEngine ["3. Deterministic Auditor (Zero LLM Guessing)"]
+        Auditor["phase0/auditor.py"]
+        HashCheck{"SHA-256 Hash<br/>File Check"}
+        GitCheck{"Git Commit<br/>cat-file Check"}
+        SocketCheck{"Live Socket<br/>Port Listener"}
+    end
+
+    subgraph Applicability ["4. Applicability Gate (v2.1 Architecture)"]
+        Gate{"Preconditions &<br/>Environment Match?"}
+        ConflictLedger[("conflicts.json<br/>Human Review Required")]
+    end
+
+    subgraph Serving ["5. Memory Serving & MCP Bus"]
+        MemoryMD["MEMORY.md<br/>Concise Active Context (&lt;30 lines)"]
+        ClaimsReg["brain/claims_register.md<br/>Human-Readable Table"]
+        MCPServer["mcp_server.py<br/>Model Context Protocol 2.x"]
+    end
+
+    %% Flow connections
+    Cursor --> Hooks
+    Claude --> Hooks
+    Antigravity --> Watcher
+    Hooks --> EventsLog
+    Watcher --> EventsLog
+
+    EventsLog --> Extractor
+    Extractor --> ClaimsLedger
+
+    ClaimsLedger --> Auditor
+    Auditor --> HashCheck & GitCheck & SocketCheck
+
+    HashCheck & GitCheck & SocketCheck -->|Verified| Gate
+    HashCheck -->|Hash Mismatch| ClaimsLedger
+    
+    Gate -->|Mismatch or Conflict| ConflictLedger
+    Gate -->|Pass| MemoryMD
+    Gate -->|Pass| ClaimsReg
+
+    MemoryMD --> MCPServer
+    MCPServer -.->|tools: get_project_memory| Cursor
+    MCPServer -.->|tools: query_claims, audit| Claude
+    MCPServer -.->|tools: get_project_memory| Antigravity
+
+    classDef surface fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef storage fill:#0f172a,stroke:#64748b,stroke-width:2px,color:#f8fafc;
+    classDef engine fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;
+    classDef gate fill:#3b0764,stroke:#c084fc,stroke-width:2px,color:#f8fafc;
+    classDef serve fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+
+    class Cursor,Claude,Antigravity surface;
+    class EventsLog,ClaimsLedger,ConflictLedger storage;
+    class Extractor,Auditor,HashCheck,GitCheck,SocketCheck engine;
+    class Gate gate;
+    class MemoryMD,ClaimsReg,MCPServer serve;
 ```
 
 ---
