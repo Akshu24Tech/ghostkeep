@@ -2,6 +2,7 @@
 
 **One project memory that every AI agent can read and write — verified by deterministic code, not another hallucinating LLM.**
 
+[![Audit CI](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/audit.yml/badge.svg)](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/audit.yml)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![MCP](https://img.shields.io/badge/Model_Context_Protocol-MCP_2.x-green.svg)](https://modelcontextprotocol.io)
 [![Status](https://img.shields.io/badge/Audit_Engine-Deterministic_Verified-success.svg)](./phase0/auditor.py)
@@ -172,9 +173,12 @@ python mcp_server.py
 
 ```
 ghostkeep/
+├── .github/workflows/
+│   └── audit.yml              # 🤖 Automated Memory Audit CI on push/PR
 ├── ghostkeep.py               # 🚀 Unified CLI (status, sync, audit, extract)
 ├── mcp_server.py              # 🔌 Native FastMCP Server for Claude/Cursor/Windsurf
 ├── MEMORY.md                  # 🧠 Concise rendered memory view (max 60 lines)
+├── requirements.txt           # Core server dependencies (FastMCP, Pydantic)
 ├── ARCHITECTURE_v2.1.md       # In-depth architectural blueprint
 ├── PROJECT.md                 # Product roadmap & operational goals
 ├── phase0/
