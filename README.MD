@@ -1,6 +1,7 @@
-# 🛡️ Ghostkeep — Shared, Verifiable Memory for AI Agents
+# Ghostkeep 
+Shared, Verifiable Memory for AI Agents
 
-**One project memory that every AI agent can read and write — verified by deterministic code, not another hallucinating LLM.**
+**One project memory that every AI agent can read and write verified by deterministic code, not another hallucinating LLM.**
 
 [![Audit CI](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/audit.yml/badge.svg)](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/audit.yml)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
