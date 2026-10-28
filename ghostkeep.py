@@ -96,6 +96,17 @@ def cmd_status():
         print(f"\nRendered MEMORY.md size: {lines} lines")
 
 
+def cmd_remember(text: str):
+    """Declare a new decision claim directly from the CLI."""
+    sys.path.insert(0, str(ROOT_DIR))
+    from phase0.extractor import declare_claim
+    from phase0.render_memory import render_memory
+
+    claim = declare_claim(text)
+    render_memory()
+    print(f"\n[OK] Declared decision [{claim.get('id')}]: '{text}'")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Ghostkeep Unified Memory Engine")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -104,6 +115,9 @@ def main():
     subparsers.add_parser("audit", help="Run auditor on claims and render MEMORY.md")
     subparsers.add_parser("extract", help="Extract claims from recent events")
     subparsers.add_parser("status", help="Show current claims and verification stats")
+    
+    parser_rem = subparsers.add_parser("remember", help="Declare a decision into memory")
+    parser_rem.add_argument("text", help="The decision text to remember")
 
     args = parser.parse_args()
 
@@ -117,6 +131,8 @@ def main():
         cmd_extract()
     elif args.command == "status":
         cmd_status()
+    elif args.command == "remember":
+        cmd_remember(args.text)
 
 
 if __name__ == "__main__":

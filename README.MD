@@ -124,7 +124,13 @@ python ghostkeep.py status
 ```
 *Prints total claims, verification breakdown (`CHECKED`, `DECLARED`, `STALE`, `INVALID`), and rendered `MEMORY.md` length.*
 
-### 2. Full Pipeline Sync (Extract → Audit → Render)
+### 2. Declare a Decision Directly
+```bash
+python ghostkeep.py remember "Always use port 8765 for server"
+```
+*Immediately declares a human decision, updates the ledger, and renders `MEMORY.md`.*
+
+### 3. Full Pipeline Sync (Extract → Audit → Render)
 ```bash
 python ghostkeep.py sync
 ```
@@ -134,7 +140,7 @@ python ghostkeep.py sync
 
 ## 🔌 Model Context Protocol (MCP) Server
 
-Ghostkeep includes a native MCP server (`mcp_server.py`) that exposes project memory directly to Claude Desktop, Cursor, and Windsurf:
+Ghostkeep includes a native FastMCP server (`mcp_server.py`) that exposes bidirectional project memory directly to Claude Desktop, Cursor, and Windsurf:
 
 ```bash
 python mcp_server.py
@@ -143,6 +149,8 @@ python mcp_server.py
 ### Supported MCP Tools:
 - **`get_project_memory()`**: Returns the latest, concise `MEMORY.md` (active human decisions + verified facts).
 - **`query_claims(status='checked', kind='verifiable')`**: Filter claims by verification status and category.
+- **`remember_claim(text='...', kind='decision')`**: Allows agents to declare architectural rules directly into persistent memory.
+- **`forget_claim(claim_id='C-003', reason='...')`**: Deprecates an obsolete claim so it stops polluting active context.
 - **`audit_memory()`**: Triggers an on-demand re-audit of the codebase and returns the refreshed memory ledger.
 
 ### Claude Desktop / Cursor Config (`mcp.json`):

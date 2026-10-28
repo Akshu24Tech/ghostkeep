@@ -94,5 +94,57 @@ def audit_memory() -> str:
     return f"Audit failed:\n{res.stderr}"
 
 
+@mcp.tool()
+def remember_claim(text: str, kind: str = "decision") -> str:
+    """Declare a new project memory decision or architectural rule.
+    
+    Args:
+        text: The decision or constraint statement (e.g. 'Use port 8765 for the server').
+        kind: 'decision' for architectural rules, or 'verifiable' for facts to be audited.
+    """
+    import sys
+    sys.path.insert(0, str(ROOT_DIR))
+    from phase0.extractor import declare_claim
+    from phase0.render_memory import render_memory
+
+    claim = declare_claim(text)
+    render_memory()
+    return f"Remembered claim [{claim.get('id')}]: '{text}' (status: {claim.get('status')}). MEMORY.md updated."
+
+
+@mcp.tool()
+def forget_claim(claim_id: str, reason: str = "") -> str:
+    """Retire or reject an outdated claim so it stops polluting active memory.
+    
+    Args:
+        claim_id: The ID of the claim to retire (e.g. 'C-003').
+        reason: Optional explanation for why this claim is obsolete.
+    """
+    from datetime import datetime, timezone
+    import sys
+    sys.path.insert(0, str(ROOT_DIR))
+    from phase0.extractor import load_existing_claims, save_claims
+    from phase0.render_memory import render_memory
+
+    claims = load_existing_claims()
+    target = None
+    for c in claims:
+        if c.get("id") == claim_id:
+            target = c
+            break
+
+    if not target:
+        return f"Claim ID '{claim_id}' not found in claims ledger."
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    target["status"] = "rejected"
+    target["status_changed_at"] = now_iso
+    target["deprecated_reason"] = reason or "Retired via forget tool"
+
+    save_claims(claims)
+    render_memory()
+    return f"Successfully retired claim [{claim_id}]: '{target.get('text')}'. Removed from active MEMORY.md."
+
+
 if __name__ == "__main__":
     mcp.run()
