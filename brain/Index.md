@@ -38,6 +38,7 @@ graph TD
     Comparisons --> Dream["[[ghostkeep-and-dreamkeeper|Ghostkeep & DreamKeeper]]"]
     Comparisons --> Graphiti["[[graphiti-vs-mem0-vs-ghostkeep|Graphiti vs Mem0 vs Ghostkeep]]"]
     Comparisons --> GKC["[[ghostkeep-and-google-knowledge-catalog|Ghostkeep & Google Knowledge Catalog]]"]
+    Comparisons --> Baton["[[ghostkeep-and-baton|Ghostkeep & Baton (Store vs Enforcer)]]"]
 
     Ideas --> Roadmap["[[future-roadmap|Future Roadmap & Ideas]]"]
     Ideas --> LongMemOpt["[[longmemeval-optimizations-for-ghostkeep|LongMemEval Memory Optimizations]]"]
@@ -76,6 +77,7 @@ graph TD
 - [[ghostkeep-and-dreamkeeper]]: How Ghostkeep acts as the canonical source-of-truth while DreamKeeper performs background consolidation ("dreaming").
 - [[graphiti-vs-mem0-vs-ghostkeep]]: Deep teardown of Graphiti's 4-stage `add_episode` pipeline, Mem0's entity-linking trade-offs, write amplification costs, and LOCOMO benchmark vulnerabilities.
 - [[ghostkeep-and-google-knowledge-catalog]]: How Google Cloud's Knowledge Catalog & Context Sets validate Ghostkeep's local-first architecture (trace mining, vectorless facts, conflict staging, and MCP).
+- [[ghostkeep-and-baton]]: **Store vs Enforcer.** How Baton (StanimirTenev/baton) — a Claude Code hook pack that makes cross-session note-taking structural — is the enforcement + rot-detection layer Ghostkeep's MCP write path assumes but doesn't enforce. Ideas ported: enforcement hooks, confidence-as-debt, `kod:` freshness, "never a silent pass."
 
 ### 4. 🚀 Research & Future Horizons
 - [[future-roadmap]]: Ideas for semantic diffing, temporal confidence decay, and multi-agent consensus voting.
