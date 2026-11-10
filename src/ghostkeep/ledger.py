@@ -74,14 +74,19 @@ class Claim:
     base: str | None = None
     id: str = field(default_factory=lambda: new_id("e"))
     ts: str = field(default_factory=now)
+    prompts: list[str] = field(default_factory=list)
+    interrupted: bool = False
+    source_rev: str | None = None
+    via: str = "manual"  # "manual" (ghostkeep log) or "sync" (read from a session log)
 
     def to_json(self) -> dict:
         return {
             "v": SCHEMA_VERSION, "kind": "claim", "id": self.id, "ts": self.ts,
             "tool": self.tool, "model": self.model, "session": self.session,
-            "source": self.source, "asked": self.asked, "claimed": self.claimed,
+            "source": self.source, "source_rev": self.source_rev, "via": self.via,
+            "asked": self.asked, "prompts": self.prompts, "claimed": self.claimed,
             "files": [f.__dict__ for f in self.files], "open": self.open,
-            "base": self.base,
+            "interrupted": self.interrupted, "base": self.base,
         }
 
     @classmethod
@@ -91,6 +96,8 @@ class Claim:
             files=[FileClaim(**f) for f in d.get("files", [])],
             open=d.get("open", []), model=d.get("model"), session=d.get("session"),
             source=d.get("source"), base=d.get("base"), id=d["id"], ts=d["ts"],
+            prompts=d.get("prompts", []), interrupted=d.get("interrupted", False),
+            source_rev=d.get("source_rev"), via=d.get("via", "manual"),
         )
 
 

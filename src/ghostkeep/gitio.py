@@ -34,6 +34,25 @@ def head(root: Path) -> str | None:
         return None  # repo with no commits yet
 
 
+def commit_before(root: Path, iso_ts: str | None) -> str | None:
+    """The commit HEAD pointed to at `iso_ts` (first-parent history), else current HEAD."""
+    if iso_ts:
+        try:
+            out = _git(root, "rev-list", "-1", "--first-parent", f"--before={iso_ts}", "HEAD").strip()
+            if out:
+                return out
+        except GitError:
+            pass
+    return head(root)
+
+
+def branch(root: Path) -> str | None:
+    try:
+        return _git(root, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    except GitError:
+        return None
+
+
 def changed_paths(root: Path) -> dict[str, str]:
     """Paths that differ from HEAD (staged, unstaged or untracked) -> porcelain code."""
     out = _git(root, "status", "--porcelain=v1", "--untracked-files=all")

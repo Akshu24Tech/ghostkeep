@@ -7,14 +7,33 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.1, Week 1 of the build. Ledger + checker work. Session-log readers (automatic capture)
-> and `ghostkeep handoff` come next.
+> Status: v0.2. Ledger, checker, automatic capture from Claude Code and Antigravity (IDE + CLI)
+> session logs, decision capture from your own words, and `ghostkeep handoff`.
 
 ## Use
 
 ```bash
 uv tool install .            # or: pip install .   (Python 3.10+, no dependencies)
 cd your-project
+ghostkeep handoff            # read session logs, check claims against git, write .ghostkeep/HANDOFF.md
+```
+
+Then tell the next agent: "Read .ghostkeep/HANDOFF.md first." For a browser chat, paste the file in.
+
+`ghostkeep handoff` reads the logs these tools already keep on disk, so no agent has to follow a rule:
+
+| Tool | Log read |
+| --- | --- |
+| Claude Code | `~/.claude/projects/<repo-path>/<session>.jsonl` |
+| Antigravity IDE agent | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` |
+| Antigravity CLI | `~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl` |
+
+Expected line counts come from the agent's own edit calls, not its summary. Secrets are redacted.
+These are internal formats and can change in any update.
+
+Manual logging still works for tools without readable logs:
+
+```bash
 ghostkeep init
 ghostkeep log --tool antigravity-ide \
   --asked 'Add one line "it is completed" at the end of docs/RESULTS.md.' \
@@ -39,6 +58,14 @@ ghostkeep show
 Measured on a real project (10 Nov 2026): after a tool switch, plain agents found *what* changed but
 got *who*, *status* or *the task itself* wrong in 4 of 5 answers, and Antigravity CLI confidently
 resumed the wrong task after a Claude session was cut off mid-way.
+
+## Earlier version
+
+The v2.1 "Claims Register" prototype (watcher, extractor, auditor, MCP server) is kept on the
+[`legacy`](../../tree/legacy) branch and in this repo's history. v0.1 restarts the code around one
+narrower job: checking agent claims about their own work at the moment you switch tools. Ideas
+carried over: append-only log, the writer never sets its own status, deterministic checks only,
+decision/preference capture from the user's own words (coming in Week 2).
 
 ## Tests
 

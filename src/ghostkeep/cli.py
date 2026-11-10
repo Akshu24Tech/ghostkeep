@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, check, gitio, ledger
+from . import __version__, check, gitio, handoff, ledger, sync
 
 PROBLEM = {"mismatch", "orphan", "corrupt"}
 MARK = {"verified": "OK ", "uncommitted": "UNC", "mismatch": "BAD", "superseded": "OLD",
@@ -67,6 +67,36 @@ def cmd_check(a: argparse.Namespace) -> int:
     return 1 if any(r.status in PROBLEM for r in results) else 0
 
 
+def cmd_sync(a: argparse.Namespace) -> int:
+    root = _root()
+    if not ledger.ledger_path(root).exists():
+        ledger.init(root)
+    rep, new = sync.run(root, days=a.days, write=not a.dry_run)
+    print(f"Sessions touching this repo (last {a.days:g} days): {rep.sessions_seen}")
+    print(f"  new claims: {rep.claims_added}   decisions/preferences: {rep.decisions_added}   "
+          f"unchanged: {rep.skipped_unchanged}   no file edits: {rep.skipped_no_edits}")
+    for r in new:
+        if r["kind"] == "claim":
+            files = ", ".join(f["path"] for f in r["files"])[:90]
+            flag = "  [interrupted]" if r.get("interrupted") else ""
+            print(f"  + {r['tool']:<16} {r['ts'][:16]}  {files}{flag}")
+    return 0
+
+
+def cmd_handoff(a: argparse.Namespace) -> int:
+    root = _root()
+    if not ledger.ledger_path(root).exists():
+        ledger.init(root)
+    if not a.no_sync:
+        sync.run(root, days=a.days)
+    results = check.run(root)
+    text = handoff.build(root, results)
+    p = handoff.write(root, text)
+    print(text)
+    print(f"(written to {p.relative_to(root)})", file=sys.stderr)
+    return 0
+
+
 def cmd_show(a: argparse.Namespace) -> int:
     root = _root()
     records = ledger.read(root)
@@ -106,6 +136,16 @@ def main(argv: list[str] | None = None) -> int:
     ck.add_argument("--json", action="store_true")
     ck.add_argument("--dry-run", action="store_true", help="don't write check records")
     ck.set_defaults(fn=cmd_check)
+
+    sy = sub.add_parser("sync", help="read Claude Code / Antigravity session logs into the ledger")
+    sy.add_argument("--days", type=float, default=14)
+    sy.add_argument("--dry-run", action="store_true")
+    sy.set_defaults(fn=cmd_sync)
+
+    ho = sub.add_parser("handoff", help="sync, check, and write .ghostkeep/HANDOFF.md for the next agent")
+    ho.add_argument("--days", type=float, default=14)
+    ho.add_argument("--no-sync", action="store_true")
+    ho.set_defaults(fn=cmd_handoff)
 
     sh = sub.add_parser("show", help="recent claims with their latest status")
     sh.add_argument("-n", type=int, default=10)
