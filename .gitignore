@@ -1,43 +1,6 @@
-# Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
-
-# Virtual environments
+*.pyc
 .venv/
-venv/
-env/
-
-# Local data & environment
-.env
-.env.local
-.ghostkeep/
-test_store/
-
-# Testing & coverage
 .pytest_cache/
-.coverage
-htmlcov/
-
-# Editor & OS files
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-
-# Obsidian volatile workspace state
-brain/.obsidian/
-.obsidian/
-
-# Local runtime logs and state
-*.old.jsonl
-phase0/events.old.jsonl
-phase0/.watcher_state.json
-phase0/.extractor_state.json
-*.log
+dist/
+*.egg-info/
