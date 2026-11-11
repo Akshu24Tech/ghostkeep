@@ -114,6 +114,7 @@ class Session:
     interrupted: bool = False
     status_note: str | None = None
     touches_root: bool = False
+    base: str | None = None  # Codex records the exact base commit; others leave it None
 
     def files(self) -> list[tuple[str, int | None, int | None]]:
         """One entry per file. Counts only when the session made exactly one edit to it."""
@@ -295,9 +296,144 @@ def antigravity_sessions(root: Path, since: float) -> list[Session]:
     return out
 
 
+# --- Codex CLI -----------------------------------------------------------------------
+# ~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<id>.jsonl (newest) or .jsonl.zst (older).
+# session_meta carries cwd + git.commit_hash (the base commit, no git call needed).
+# Codex edits via shell (exec_command {"cmd": "..."}), so files are sniffed from the
+# command and line counts are usually unknown — the checker verifies changed-vs-git anyway.
+
+def codex_dir() -> Path:
+    return Path(os.environ.get("GHOSTKEEP_CODEX_DIR", Path.home() / ".codex" / "sessions"))
+
+
+# apply_patch headers, and common PowerShell/shell writes to a path.
+_CODEX_PATCH = re.compile(r"\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)")
+_CODEX_WRITES = [
+    re.compile(r"(?:Set-Content|Out-File|Add-Content)\b[^\n|]*?-Path\s+(?P<p>\"[^\"]+\"|'[^']+'|\S+)", re.I),
+    re.compile(r"\b(?:tee|sed\s+-i[^\s]*|dd\s+of=)\s+(?P<p>\"[^\"]+\"|'[^']+'|\S+)"),
+    re.compile(r"(?<![>\d])>>?\s*(?P<p>\"[^\"]+\"|'[^']+'|[^\s;|&]+)"),  # redirection to a file
+]
+
+
+def _codex_edits_from_cmd(cmd: str, root: Path) -> list[Edit]:
+    edits: list[Edit] = []
+    # apply_patch: count +/- lines per file section.
+    if "apply_patch" in cmd:
+        cur, add, rem = None, 0, 0
+        for ln in cmd.splitlines():
+            m = _CODEX_PATCH.match(ln.strip())
+            if m:
+                if cur:
+                    edits.append(Edit(cur, add, rem))
+                cur, add, rem = relpath(m.group(1).strip(), root), 0, 0
+            elif cur and ln[:1] == "+" and not ln.startswith("+++"):
+                add += 1
+            elif cur and ln[:1] == "-" and not ln.startswith("---"):
+                rem += 1
+        if cur:
+            edits.append(Edit(cur, add, rem))
+    if edits:
+        return [e for e in edits if e.path]
+    # shell writes: path known, counts unknown.
+    for rx in _CODEX_WRITES:
+        for m in rx.finditer(cmd):
+            rel = relpath(m.group("p").strip("\"'"), root)
+            if rel and "." in Path(rel).name:  # looks like a file, not a redirect to /dev/null etc.
+                edits.append(Edit(rel, None, None))
+    return edits
+
+
+def _codex_text(content) -> str:
+    if isinstance(content, list):
+        return "\n".join(x.get("text", "") for x in content
+                         if isinstance(x, dict) and x.get("type") in ("input_text", "output_text", "text"))
+    return content if isinstance(content, str) else ""
+
+
+def _read_zst(path: Path) -> list[str]:
+    try:
+        import zstandard
+    except ImportError:
+        return []  # can't read compressed sessions without the optional dep
+    data = zstandard.ZstdDecompressor().decompress(path.read_bytes(), max_output_size=80_000_000)
+    return data.decode("utf-8", "replace").splitlines()
+
+
+def read_codex(path: Path, root: Path) -> Session | None:
+    st = path.stat()
+    lines = _read_zst(path) if path.suffix == ".zst" else \
+        path.read_text(encoding="utf-8", errors="replace").splitlines()
+    if not lines:
+        return None
+    s = Session("codex", path.name, str(path), f"{st.st_size}:{int(st.st_mtime)}")
+    had_task = done_task = cwd_match = False
+    for line in lines:
+        try:
+            o = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        p = o.get("payload") if isinstance(o.get("payload"), dict) else {}
+        ts = o.get("timestamp")
+        if ts:
+            s.started = s.started or ts
+            s.ended = ts
+        if o.get("type") == "session_meta":
+            cwd = p.get("cwd", "")
+            cwd_match = cwd == str(root) or relpath(cwd, root) in ("", ".")
+            if cwd_match:
+                s.touches_root = True
+                s.base = (p.get("git") or {}).get("commit_hash") or s.base
+            s.model = p.get("model") or s.model
+        elif p.get("type") == "message" and p.get("role") == "user":
+            text = _codex_text(p.get("content")).strip()
+            if text and not text.startswith("<"):
+                s.prompts.append((ts, text))
+        elif p.get("type") == "message" and p.get("role") == "assistant":
+            text = _codex_text(p.get("content")).strip()
+            if text:
+                s.final = text
+        elif cwd_match and p.get("type") == "function_call" and p.get("name") in ("exec_command", "shell", "local_shell"):
+            try:
+                a = json.loads(p.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                a = {}
+            cmd = a.get("cmd") or a.get("command") or ""
+            if isinstance(cmd, list):
+                cmd = " ".join(str(x) for x in cmd)
+            s.edits.extend(_codex_edits_from_cmd(cmd, root))
+        t = o.get("type")
+        if t == "event_msg" and p.get("type") == "task_started":
+            had_task = True
+        if t == "event_msg" and p.get("type") == "task_complete":
+            done_task = True
+    if had_task and not done_task:
+        s.interrupted = True
+        s.status_note = "no task_complete recorded"
+    return s
+
+
+def codex_sessions(root: Path, since: float) -> list[Session]:
+    base = codex_dir()
+    if not base.is_dir():
+        return []
+    out, needle = [], str(root).lower()
+    for p in base.glob("*/*/*/rollout-*.jsonl*"):
+        if p.suffix not in (".jsonl", ".zst"):
+            continue
+        try:
+            if p.stat().st_mtime < since:
+                continue
+            s = read_codex(p, root)
+        except OSError:
+            continue
+        if s and s.touches_root:
+            out.append(s)
+    return out
+
+
 def all_sessions(root: Path, days: float = 14) -> list[Session]:
     since = time.time() - days * 86400
-    sessions = claude_sessions(root, since) + antigravity_sessions(root, since)
+    sessions = claude_sessions(root, since) + antigravity_sessions(root, since) + codex_sessions(root, since)
     seen, unique = set(), []
     for s in sessions:  # the same Antigravity id can appear under two folders
         if (s.tool, s.session) not in seen:

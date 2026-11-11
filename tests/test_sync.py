@@ -28,11 +28,13 @@ def env(tmp_path, monkeypatch):
     home = tmp_path / "home"
     claude = home / ".claude/projects"
     ide, cli = home / ".gemini/antigravity/brain", home / ".gemini/antigravity-cli/brain"
+    codex = home / ".codex/sessions"
     monkeypatch.setenv("GHOSTKEEP_CLAUDE_DIR", str(claude))
     monkeypatch.setenv("GHOSTKEEP_ANTIGRAVITY_DIRS", f"antigravity-ide={ide};antigravity-cli={cli}")
+    monkeypatch.setenv("GHOSTKEEP_CODEX_DIR", str(codex))
     monkeypatch.chdir(repo)
     main(["init"])
-    return {"repo": repo, "claude": claude / sources.claude_slug(repo), "ide": ide, "cli": cli}
+    return {"repo": repo, "claude": claude / sources.claude_slug(repo), "ide": ide, "cli": cli, "codex": codex}
 
 
 def write_jsonl(path: Path, rows):
@@ -187,6 +189,91 @@ def test_sync_is_idempotent_and_growing_session_supersedes(env):
     assert sync.run(repo)[0].claims_added == 1
     statuses = [r.status for r in check.run(repo)]
     assert statuses[0] == "superseded"
+
+
+def codex_session(env, name, rows):
+    d = env["codex"] / "2026/11/11"
+    write_jsonl(d / f"{name}.jsonl", rows)
+
+
+def cx_meta(repo, commit="abc123", branch="main"):
+    return {"timestamp": "2026-11-11T10:00:00Z", "type": "session_meta",
+            "payload": {"type": "session_meta", "cwd": str(repo), "cli_version": "0.161.0",
+                        "source": "vscode", "git": {"commit_hash": commit, "branch": branch}}}
+
+
+def cx_user(text, ts="2026-11-11T10:01:00Z"):
+    return {"timestamp": ts, "type": "response_item",
+            "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}}
+
+
+def cx_exec(cmd, ts="2026-11-11T10:02:00Z"):
+    return {"timestamp": ts, "type": "response_item",
+            "payload": {"type": "function_call", "name": "exec_command",
+                        "arguments": json.dumps({"cmd": cmd})}}
+
+
+def cx_assistant(text, ts="2026-11-11T10:03:00Z"):
+    return {"timestamp": ts, "type": "response_item",
+            "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}}
+
+
+def cx_event(ptype, ts="2026-11-11T10:04:00Z"):
+    return {"timestamp": ts, "type": "event_msg", "payload": {"type": ptype}}
+
+
+def test_codex_apply_patch_counts_and_base_commit(env):
+    repo = env["repo"]
+    patch = ("apply_patch << 'EOF'\n*** Begin Patch\n*** Update File: dates.py\n"
+             "@@\n-    return None\n+    return None\n+X = 1\n*** End Patch\nEOF")
+    codex_session(env, "rollout-a", [
+        cx_meta(repo, commit="feedface"), cx_user("add X to dates.py"),
+        cx_exec(patch), cx_assistant("Added X."), cx_event("task_started"), cx_event("task_complete"),
+    ])
+    with (repo / "dates.py").open("a") as fh:
+        fh.write("X = 1\n")
+    rep, _ = sync.run(repo)
+    assert rep.claims_added == 1
+    [c] = ledger.claims(ledger.read(repo))
+    assert c.tool == "codex" and c.base == "feedface"  # base commit read straight from session_meta
+    assert (c.files[0].path, c.files[0].added, c.files[0].removed) == ("dates.py", 2, 1)
+
+
+def test_codex_shell_write_detected_counts_unknown(env):
+    repo = env["repo"]
+    codex_session(env, "rollout-b", [
+        cx_meta(repo), cx_user("write a note"),
+        cx_exec('Set-Content -Path docs\\RESULTS.md -Value "done"'),
+        cx_assistant("Wrote it."),
+    ])
+    (repo / "docs/RESULTS.md").write_text("# Results\ndone\n")
+    sync.run(repo)
+    [c] = ledger.claims(ledger.read(repo))
+    assert c.files[0].path == "docs/RESULTS.md" and c.files[0].added is None
+
+
+def test_codex_interrupted_when_no_task_complete(env):
+    repo = env["repo"]
+    codex_session(env, "rollout-c", [
+        cx_meta(repo), cx_user("fix dates"),
+        cx_exec("apply_patch << 'EOF'\n*** Update File: dates.py\n+A = 1\nEOF"),
+        cx_event("task_started"),  # no task_complete
+    ])
+    with (repo / "dates.py").open("a") as fh:
+        fh.write("A = 1\n")
+    sync.run(repo)
+    [c] = ledger.claims(ledger.read(repo))
+    assert c.interrupted and "task_complete" in c.open[0]
+
+
+def test_codex_session_outside_repo_ignored(env):
+    repo = env["repo"]
+    codex_session(env, "rollout-d", [
+        {"timestamp": "2026-11-11T10:00:00Z", "type": "session_meta",
+         "payload": {"type": "session_meta", "cwd": "E:\\Other\\project", "git": {"commit_hash": "x"}}},
+        cx_user("do a thing"), cx_exec("apply_patch << 'EOF'\n*** Update File: a.py\n+x\nEOF"),
+    ])
+    assert sync.run(repo)[0].claims_added == 0
 
 
 def test_cli_handoff_writes_file(env, capsys):

@@ -31,7 +31,7 @@ def session_to_claim(root: Path, s: sources.Session) -> Claim | None:
     return Claim(
         tool=s.tool, asked=sources.clip(first), claimed=sources.clip(s.final or "(no final summary)"),
         files=files, open=open_items, model=s.model, session=s.session, source=s.source,
-        base=gitio.commit_before(root, s.started), ts=sources.to_local(s.ended) or now(),
+        base=s.base or gitio.commit_before(root, s.started), ts=sources.to_local(s.ended) or now(),
         prompts=[sources.clip(p, 300) for _, p in s.prompts[:8]], interrupted=s.interrupted,
         source_rev=s.rev, via="sync",
     )
