@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import gitio, ledger
+from . import gitio, ledger, sources
 from .ledger import LEDGER_DIR, Claim, new_id, now
 
 
@@ -37,7 +37,26 @@ def _fmt(added: int | None, removed: int | None) -> str:
     return f"+{added} -{removed}"
 
 
-def check_claim(root: Path, claim: Claim, newest_for: dict[str, str], dirty: dict[str, str]) -> Result:
+def _content_delta(root: Path, base: str | None, path: str) -> tuple[int, int] | None:
+    """Line counts measured the way claims are measured (splitlines), so a missing newline at the end
+    of a file or CRLF vs LF doesn't read as an extra changed line."""
+    old = gitio.show(root, base, path) or ""
+    try:
+        new = (root / path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        new = ""
+    if old == new:
+        return None
+    return sources.line_delta(old, new)
+
+
+def _matches(actual: tuple, options: list[tuple]) -> bool:
+    a, r = actual
+    return any((ea is None or ea == a) and (er is None or er == r) for ea, er in options)
+
+
+def check_claim(root: Path, claim: Claim, newest_for: dict[str, str], dirty: dict[str, str],
+                chain: dict[str, tuple[int, int]] | None = None) -> Result:
     findings: list[Finding] = []
     any_uncommitted = False
     strict_files = [f for f in claim.files if newest_for.get(f.path) == claim.id]
@@ -50,11 +69,18 @@ def check_claim(root: Path, claim: Claim, newest_for: dict[str, str], dirty: dic
             findings.append(Finding(f.path, "claimed_not_found", f.expected(), "no change"))
             continue
         a, r = actual
-        if a is not None and (
-            (f.added is not None and f.added != a) or (f.removed is not None and f.removed != r)
-        ):
-            findings.append(Finding(f.path, "count_mismatch", f.expected(), _fmt(a, r)))
-            continue
+        # What the file should show: this session's own counts, or, when earlier sessions edited the
+        # same uncommitted file from the same commit, the sum of every session's counts.
+        options = [(f.added, f.removed)]
+        if chain and f.path in chain:
+            options.append(chain[f.path])
+        if a is not None and not _matches(actual, options):
+            alt = _content_delta(root, claim.base, f.path)
+            if alt is not None and _matches(alt, options):
+                actual, (a, r) = alt, alt
+            else:
+                findings.append(Finding(f.path, "count_mismatch", f.expected(), _fmt(a, r)))
+                continue
         if f.path in dirty:
             any_uncommitted = True
             code = "untracked" if dirty[f.path] == "??" else "not_committed"
@@ -69,6 +95,40 @@ def check_claim(root: Path, claim: Claim, newest_for: dict[str, str], dirty: dic
     return Result(claim.id, status, findings, claim)
 
 
+def _chains(all_claims: list[Claim], newest_for: dict[str, str]) -> dict[str, dict[str, tuple[int, int]]]:
+    """For the newest claim on each file: the summed counts of every claim on that file made from the
+    same base commit, when there is more than one and all of them reported counts."""
+    by_id = {c.id: c for c in all_claims}
+    out: dict[str, dict[str, tuple[int, int]]] = {}
+    for path, newest_id in newest_for.items():
+        newest = by_id[newest_id]
+        same = [fc for c in all_claims if c.base == newest.base for fc in c.files if fc.path == path]
+        if len(same) > 1 and all(fc.added is not None and fc.removed is not None for fc in same):
+            out.setdefault(newest_id, {})[path] = (sum(fc.added for fc in same), sum(fc.removed for fc in same))
+    return out
+
+
+def covering_claims(root: Path, claims: list[Claim], results: list[Result],
+                    paths) -> dict[str, list[Claim]]:
+    """Which claims account for each changed file, newest first.
+
+    A claim accounts for a change when it names the file, its edit is actually on disk, and nobody has
+    committed that file since the claim's base commit (so the change on disk is still the one it made).
+    """
+    gone = {(r.entry, f.path) for r in results for f in r.findings if f.code == "claimed_not_found"}
+    out: dict[str, list[Claim]] = {}
+    for path in paths:
+        last = gitio.last_commit_touching(root, path)
+        for c in claims:
+            if path not in {f.path for f in c.files} or (c.id, path) in gone:
+                continue
+            if last is None or c.base is None or gitio.is_ancestor(root, last, c.base):
+                out.setdefault(path, []).append(c)
+        if path in out:
+            out[path].reverse()
+    return out
+
+
 def run(root: Path, write: bool = True) -> list[Result]:
     records = ledger.read(root)
     all_claims = ledger.claims(records)
@@ -81,11 +141,12 @@ def run(root: Path, write: bool = True) -> list[Result]:
     for c in all_claims:
         for f in c.files:
             newest_for[f.path] = c.id
+    chains = _chains(all_claims, newest_for)
 
-    results = [check_claim(root, c, newest_for, dirty) for c in all_claims]
+    results = [check_claim(root, c, newest_for, dirty, chains.get(c.id)) for c in all_claims]
 
-    # Orphans: working-tree changes that no claim on the current HEAD mentions.
-    covered = {f.path for c in all_claims if c.base == head for f in c.files}
+    # Orphans: changed files that no claim accounts for.
+    covered = covering_claims(root, all_claims, results, dirty)
     orphans = sorted(p for p in dirty if p not in covered)
     if orphans:
         results.append(Result(None, "orphan", [

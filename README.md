@@ -2,6 +2,8 @@
 
 Verified handoffs between free AI coding tools.
 
+[![tests](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/ci.yml/badge.svg)](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/ci.yml)
+
 ![Ghostkeep demo: one command reads every tool's session log and checks each claim against git](docs/demo.gif)
 
 When you switch from Claude Code to Antigravity CLI (limit hit, missing feature, second opinion),
@@ -11,7 +13,7 @@ ledger per project and checks every claim against git, with no LLM, no API key a
 
 > Status: v0.3. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
-> Tested on Windows. Mac and Linux reports welcome.
+> Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
 ## Install and run
 
@@ -100,8 +102,17 @@ narrower job: checking agent claims about their own work at the moment you switc
 carried over: append-only log, the writer never sets its own status, deterministic checks only,
 and decision/preference capture from the user's own words.
 
-## Tests
+## Tests and evals
 
 ```bash
-uv run --group dev pytest    # or: python -m pytest
+python -m pytest -q          # unit tests
+python evals/run.py          # 23 labeled cases scored on 15 metrics, writes evals/RESULTS.md
+python evals/run.py --gate   # exit 1 if any metric is below target (what CI runs)
 ```
+
+The eval cases are small fake projects with session logs in each tool's real format and the right answer
+written down: claimed files and line counts, verdicts, orphans, who changed what, decisions captured,
+unfinished work first, plus adversarial cases (planted instructions in an agent's message, secrets,
+malformed logs, sessions from another repo). Latest numbers: [evals/RESULTS.md](evals/RESULTS.md).
+How Ghostkeep scores against an agentic system design review, and what's left:
+[docs/DESIGN_AUDIT.md](docs/DESIGN_AUDIT.md).

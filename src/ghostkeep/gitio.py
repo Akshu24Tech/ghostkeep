@@ -84,6 +84,30 @@ def numstat(root: Path, base: str | None, path: str) -> tuple[int | None, int | 
     return None
 
 
+def show(root: Path, rev: str | None, path: str) -> str | None:
+    """File content at `rev`, or None if it didn't exist there."""
+    if rev is None:
+        return None
+    try:
+        return _git(root, "show", f"{rev}:{path}")
+    except GitError:
+        return None
+
+
+def last_commit_touching(root: Path, path: str) -> str | None:
+    try:
+        return _git(root, "log", "-1", "--format=%H", "--", path).strip() or None
+    except GitError:
+        return None
+
+
+def is_ancestor(root: Path, older: str, newer: str) -> bool:
+    """True when `older` is `newer` or one of its ancestors."""
+    proc = subprocess.run(["git", "merge-base", "--is-ancestor", older, newer], cwd=root,
+                          capture_output=True, text=True)
+    return proc.returncode == 0
+
+
 def _count_lines(file: Path) -> int | None:
     try:
         data = file.read_bytes()

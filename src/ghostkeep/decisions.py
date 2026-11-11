@@ -17,14 +17,17 @@ DECISION = [
     r"\bdon'?t\s+(?:use|build|add)\b",
     r"\bdo\s+not\s+(?:use|invent|change|add)\b",
     r"\brejected?\b",
-    r"\bswitch\s+to\b",
+    r"\b(?:let'?s|we(?:'ll|\s+will|\s+should)?)\s+switch\s+to\b",  # "switch to the logs tab" is a request, not a choice
     r"\bchose\b|\bchoose\b",
     r"\bsupersedes\b",
 ]
+# A preference is an instruction about how to work, not a description. "Always run the evals" is one;
+# "the tests always fail" and "never mind" are not, so always/never only count as a command at the
+# start of a sentence, or after I/we with a working verb.
 PREFERENCE = [
-    r"\balways\b",
-    r"\bnever\b",
-    r"\bprefer\b",
+    r"^(?:please\s+|and\s+)?(?:always|never)\s+(?!mind\b)[a-z]",
+    r"\b(?:i|we)\s+(?:always|never)\s+(?:use|want|run|write|commit|push|keep|test|deploy|add|put)\b",
+    r"\bi\s+prefer\b|\bwe\s+prefer\b|\bprefer\s+(?:to|using)\b",
     r"\bfrom\s+now\s+on\b",
 ]
 _D = [re.compile(p, re.I) for p in DECISION]

@@ -24,14 +24,17 @@ _SECRET_RES = [
     re.compile(r"\b(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
                r"|AIza[0-9A-Za-z_-]{30,}|xox[abpr]-[A-Za-z0-9-]{10,}|gsk_[A-Za-z0-9]{20,})"),
     re.compile(r"(?i)\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+"),
-    re.compile(r"\b[A-Za-z0-9+_-]{40,}={0,2}\b"),
 ]
+# Long opaque tokens are probably secrets, but pure hex of git/sha256 length is a commit or hash
+# the next agent needs, so those are kept.
+_LONG_TOKEN = re.compile(r"\b[A-Za-z0-9+_-]{40,}={0,2}\b")
+_HASH = re.compile(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")
 
 
 def redact(text: str) -> str:
     for rx in _SECRET_RES:
         text = rx.sub("[redacted]", text)
-    return text
+    return _LONG_TOKEN.sub(lambda m: m.group(0) if _HASH.fullmatch(m.group(0)) else "[redacted]", text)
 
 
 def clip(text: str, n: int = MAX_TEXT) -> str:
@@ -158,13 +161,15 @@ def read_claude(path: Path, root: Path) -> Session:
             o = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(o, dict):
+            continue  # 'null', numbers, arrays: not an event
         t, ts = o.get("type"), o.get("timestamp")
         if t not in ("user", "assistant"):
             continue
         if ts:
             s.started = s.started or ts
             s.ended = ts
-        msg = o.get("message") or {}
+        msg = o.get("message") if isinstance(o.get("message"), dict) else {}
         if t == "user":
             if o.get("toolUseResult") is not None:
                 continue
@@ -240,6 +245,8 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
             o = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(o, dict):
+            continue  # 'null', numbers, arrays: not an event
         t, ts = o.get("type"), o.get("created_at")
         if ts:
             s.started = s.started or ts
@@ -308,11 +315,17 @@ def codex_dir() -> Path:
 
 # apply_patch headers, and common PowerShell/shell writes to a path.
 _CODEX_PATCH = re.compile(r"\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)")
-_CODEX_WRITES = [
-    re.compile(r"(?:Set-Content|Out-File|Add-Content)\b[^\n|]*?-Path\s+(?P<p>\"[^\"]+\"|'[^']+'|\S+)", re.I),
-    re.compile(r"\b(?:tee|sed\s+-i[^\s]*|dd\s+of=)\s+(?P<p>\"[^\"]+\"|'[^']+'|\S+)"),
-    re.compile(r"(?<![>\d])>>?\s*(?P<p>\"[^\"]+\"|'[^']+'|[^\s;|&]+)"),  # redirection to a file
+# Writers that name their target explicitly: safe to read from the raw command.
+_CODEX_PATH_WRITES = [
+    re.compile(r"(?:Set-Content|Out-File|Add-Content)\b[^\n|]*?-(?:Path|FilePath)\s+(?P<p>\"[^\"]+\"|'[^']+'|\S+)", re.I),
 ]
+# Writers found by syntax ('>' redirects, tee, sed -i). Only matched AFTER quoted strings are blanked,
+# so text like  rg "x > y.txt"  or  print(a > '3.10')  is not mistaken for a write.
+_CODEX_SYNTAX_WRITES = [
+    re.compile(r"\b(?:tee(?:\s+-a)?|sed\s+-i\S*(?:\s+\S+)?|dd\s+of=)\s+(?P<p>[^\s;|&]+)"),
+    re.compile(r"(?<![>\d&-])>>?\s*(?P<p>[^\s;|&]+)"),
+]
+_QUOTED = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'")
 
 
 def _codex_edits_from_cmd(cmd: str, root: Path) -> list[Edit]:
@@ -335,12 +348,14 @@ def _codex_edits_from_cmd(cmd: str, root: Path) -> list[Edit]:
     if edits:
         return [e for e in edits if e.path]
     # shell writes: path known, counts unknown.
-    for rx in _CODEX_WRITES:
-        for m in rx.finditer(cmd):
+    blanked = _QUOTED.sub('""', cmd)
+    found: list[str] = []
+    for rx, text in [(r, cmd) for r in _CODEX_PATH_WRITES] + [(r, blanked) for r in _CODEX_SYNTAX_WRITES]:
+        for m in rx.finditer(text):
             rel = relpath(m.group("p").strip("\"'"), root)
-            if rel and "." in Path(rel).name:  # looks like a file, not a redirect to /dev/null etc.
-                edits.append(Edit(rel, None, None))
-    return edits
+            if rel and "." in Path(rel).name and rel not in found:  # a file, not /dev/null or a bare word
+                found.append(rel)
+    return [Edit(rel, None, None) for rel in found]
 
 
 def _codex_text(content) -> str:
@@ -372,6 +387,8 @@ def read_codex(path: Path, root: Path) -> Session | None:
             o = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(o, dict):
+            continue  # 'null', numbers, arrays: not an event
         p = o.get("payload") if isinstance(o.get("payload"), dict) else {}
         ts = o.get("timestamp")
         if ts:
@@ -396,6 +413,8 @@ def read_codex(path: Path, root: Path) -> Session | None:
             try:
                 a = json.loads(p.get("arguments") or "{}")
             except json.JSONDecodeError:
+                a = {}
+            if not isinstance(a, dict):
                 a = {}
             cmd = a.get("cmd") or a.get("command") or ""
             if isinstance(cmd, list):
