@@ -2,13 +2,16 @@
 
 Verified handoffs between free AI coding tools.
 
+![Ghostkeep demo: one command reads every tool's session log and checks each claim against git](docs/demo.gif)
+
 When you switch from Claude Code to Antigravity CLI (limit hit, missing feature, second opinion),
 the files carry over but the story doesn't. The next agent can't tell what was asked, who changed
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.2. Ledger, checker, automatic capture from Claude Code and Antigravity (IDE + CLI)
-> session logs, decision capture from your own words, and `ghostkeep handoff`.
+> Status: v0.3. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
+> Tested on Windows. Mac and Linux reports welcome.
 
 ## Install and run
 
@@ -41,8 +44,10 @@ Then tell the next agent: "Read .ghostkeep/HANDOFF.md first." For a browser chat
 | Claude Code | `~/.claude/projects/<repo-path>/<session>.jsonl` |
 | Antigravity IDE agent | `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` |
 | Antigravity CLI | `~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl` |
+| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (older `.zst` files need the `codex` extra) |
 
-Expected line counts come from the agent's own edit calls, not its summary. Secrets are redacted.
+Expected line counts come from the agent's own edit calls, not its summary. Codex edits through
+shell commands, so its files are found in `apply_patch` and file-write commands. Secrets are redacted.
 These are internal formats and can change in any update.
 
 Manual logging still works for tools without readable logs:
@@ -65,7 +70,17 @@ ghostkeep show
 
 ## Statuses
 
-`verified` · `uncommitted` · `mismatch` · `superseded` · `orphan`. See [docs/LEDGER.md](docs/LEDGER.md).
+| Status | Means |
+| --- | --- |
+| `verified` | The file changed exactly as the agent claimed, and it's committed |
+| `uncommitted` | Matches the claim, not committed yet |
+| `mismatch` | The claim doesn't match git, e.g. "added 1 line" but the diff shows 3 |
+| claimed but not on disk | The agent said it edited a file and git shows no change: still pending in the IDE, or rejected |
+| `orphan` | A file changed and no session claims it |
+| `superseded` | A later session changed the same file |
+
+The accept/reject click in an IDE isn't recorded in any session log, so git is the ground truth.
+See [docs/LEDGER.md](docs/LEDGER.md) for the ledger format.
 
 ## Why
 
@@ -73,13 +88,17 @@ Measured on a real project (10 Nov 2026): after a tool switch, plain agents foun
 got *who*, *status* or *the task itself* wrong in 4 of 5 answers, and Antigravity CLI confidently
 resumed the wrong task after a Claude session was cut off mid-way.
 
+Then the same test with Ghostkeep (11 Nov 2026): Claude cut off mid-task, `ghostkeep handoff` run,
+Antigravity CLI told to read `.ghostkeep/HANDOFF.md` first. It named the right task and the
+interrupted file, and continued without being re-told.
+
 ## Earlier version
 
 The v2.1 "Claims Register" prototype (watcher, extractor, auditor, MCP server) is kept on the
 [`legacy`](../../tree/legacy) branch and in this repo's history. v0.1 restarts the code around one
 narrower job: checking agent claims about their own work at the moment you switch tools. Ideas
 carried over: append-only log, the writer never sets its own status, deterministic checks only,
-decision/preference capture from the user's own words (coming in Week 2).
+and decision/preference capture from the user's own words.
 
 ## Tests
 
