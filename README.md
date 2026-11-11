@@ -10,10 +10,24 @@ ledger per project and checks every claim against git, with no LLM, no API key a
 > Status: v0.2. Ledger, checker, automatic capture from Claude Code and Antigravity (IDE + CLI)
 > session logs, decision capture from your own words, and `ghostkeep handoff`.
 
-## Use
+## Install and run
+
+Needs Python 3.10+. No dependencies, no server, no API key.
 
 ```bash
-uv tool install .            # or: pip install .   (Python 3.10+, no dependencies)
+# run it once, nothing to install (needs uv)
+uvx --from git+https://github.com/Akshu24Tech/ghostkeep ghostkeep handoff
+
+# or install the command
+pipx install git+https://github.com/Akshu24Tech/ghostkeep
+# or
+pip install git+https://github.com/Akshu24Tech/ghostkeep
+
+# reading Codex's older compressed (.zst) sessions is an optional extra
+pipx install "ghostkeep[codex] @ git+https://github.com/Akshu24Tech/ghostkeep"
+```
+
+```bash
 cd your-project
 ghostkeep handoff            # read session logs, check claims against git, write .ghostkeep/HANDOFF.md
 ```

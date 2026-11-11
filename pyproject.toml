@@ -1,11 +1,20 @@
 [project]
 name = "ghostkeep"
-version = "0.2.0"
+version = "0.3.0"
 description = "Verified handoffs between free AI coding tools"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Akshu Grewal" }]
+keywords = ["ai", "coding-agents", "handoff", "git", "claude-code", "codex", "antigravity"]
 dependencies = []
+
+[project.optional-dependencies]
+codex = ["zstandard>=0.22"]   # read Codex's older compressed (.zst) session logs
+
+[project.urls]
+Homepage = "https://github.com/Akshu24Tech/ghostkeep"
+Repository = "https://github.com/Akshu24Tech/ghostkeep"
 
 [project.scripts]
 ghostkeep = "ghostkeep.cli:main"
