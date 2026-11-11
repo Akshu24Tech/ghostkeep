@@ -65,24 +65,14 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
     # 3. Who changed what, right now (working tree vs HEAD).
     dirty = {p: c for p, c in gitio.changed_paths(root).items() if not p.startswith(ledger.LEDGER_DIR + "/")}
     if dirty:
-        # Every session since HEAD that says it touched the file, newest first.
-        # A session whose own claim doesn't match git is marked, so it isn't mistaken for the author.
-        owners: dict[str, list[str]] = {}
+        owner: dict[str, str] = {}
         for c in claims:
-            if c.base != head:
-                continue
-            r = status.get(c.id)
-            bad = r is not None and any(f.code == "claimed_not_found" for f in r.findings)
-            mism = r is not None and r.status == "mismatch" and not bad
             for f in c.files:
-                tag = " (its edit is not on disk)" if bad else " (counts don't match)" if mism else ""
-                owners.setdefault(f.path, []).append(f"{c.tool} {_short(c.ts)[11:]}{tag}")
+                owner[f.path] = f"{c.tool} ({_short(c.ts)})"
         L.append("## Uncommitted changes")
         for p in sorted(dirty)[:12]:
             kind = "new file" if dirty[p] == "??" else "modified"
-            who = owners.get(p)
-            by = "; ".join(who[::-1][:3]) if who else "**unknown: no session claims it**"
-            L.append(f"- `{p}` ({kind}) by {by}")
+            L.append(f"- `{p}` ({kind}) by {owner.get(p, '**unknown: no session claims it**')}")
         if len(dirty) > 12:
             L.append(f"- …and {len(dirty) - 12} more")
         L.append("")
