@@ -58,6 +58,8 @@ class FileClaim:
     def expected(self) -> str:
         if self.added is None and self.removed is None:
             return "changed"
+        if self.added == 0 and self.removed is None:
+            return "deleted"
         return f"+{self.added if self.added is not None else '?'} -{self.removed if self.removed is not None else '?'}"
 
 
@@ -105,6 +107,11 @@ def init(root: Path) -> Path:
     p = ledger_path(root)
     p.parent.mkdir(exist_ok=True)
     p.touch(exist_ok=True)
+    # Keep .ghostkeep/ out of git without touching the project's own .gitignore: the ledger quotes your
+    # messages, and a stranger's first `git add .` shouldn't publish it.
+    ign = p.parent / ".gitignore"
+    if not ign.exists():
+        ign.write_text("# created by ghostkeep: keep this folder out of git\n*\n", encoding="utf-8")
     return p
 
 

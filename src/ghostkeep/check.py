@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from . import gitio, ledger, sources
@@ -50,6 +51,18 @@ def _content_delta(root: Path, base: str | None, path: str) -> tuple[int, int] |
     return sources.line_delta(old, new)
 
 
+def _recreated_after(root: Path, claim: Claim, path: str) -> bool:
+    """A deleted file that is back: committed after the session's base, or written after the session ended."""
+    last = gitio.last_commit_touching(root, path)
+    if last and claim.base and not gitio.is_ancestor(root, last, claim.base):
+        return True
+    try:
+        ended = datetime.fromisoformat(claim.ts.replace("Z", "+00:00")).timestamp()
+        return (root / path).stat().st_mtime > ended + 60
+    except (ValueError, OSError, AttributeError):
+        return False
+
+
 def _matches(actual: tuple, options: list[tuple]) -> bool:
     a, r = actual
     return any((ea is None or ea == a) and (er is None or er == r) for ea, er in options)
@@ -60,10 +73,30 @@ def check_claim(root: Path, claim: Claim, newest_for: dict[str, str], dirty: dic
     findings: list[Finding] = []
     any_uncommitted = False
     strict_files = [f for f in claim.files if newest_for.get(f.path) == claim.id]
-    if claim.files and not strict_files:
+    if not claim.files:
+        return Result(claim.id, "no_files", claim=claim)  # interrupted before changing anything
+    if not strict_files:
         return Result(claim.id, "superseded", claim=claim)
 
     for f in strict_files:
+        if gitio.outside_git(root, f.path):
+            # git can't see this file (.git/hooks, ignored files), so "no change in git" proves nothing.
+            # Only say what the disk shows; never call it missing when it's there.
+            if (root / f.path).exists():
+                findings.append(Finding(f.path, "outside_git", f.expected(), "on disk, git doesn't track it"))
+            else:
+                findings.append(Finding(f.path, "claimed_not_found", f.expected(), "not on disk"))
+            continue
+        if f.added == 0 and f.removed is None:  # the session deleted this file
+            if (root / f.path).exists():
+                if _recreated_after(root, claim, f.path):
+                    findings.append(Finding(f.path, "changed_later", "deleted", "re-created after this session"))
+                else:
+                    findings.append(Finding(f.path, "claimed_not_found", "deleted", "still on disk"))
+            elif f.path in dirty:
+                any_uncommitted = True
+                findings.append(Finding(f.path, "not_committed", "deleted", "deleted"))
+            continue
         actual = gitio.numstat(root, claim.base, f.path)
         if actual is None:
             findings.append(Finding(f.path, "claimed_not_found", f.expected(), "no change"))

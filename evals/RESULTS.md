@@ -1,24 +1,24 @@
 # Ghostkeep eval results
 
-ghostkeep 0.3.1 · 23 labeled cases · python 3.12.12 · Windows
+ghostkeep 0.3.2 · 30 labeled cases · python 3.11.15 · Windows
 
 | Metric | Value | Items | Target | |
 | --- | --- | --- | --- | --- |
 | crashes | 0 |  | <= 0 | ok |
-| capture_precision | 1.00 | 25/25 | >= 0.95 | ok |
-| capture_recall | 1.00 | 23/23 | >= 0.95 | ok |
-| count_accuracy | 1.00 | 19/19 | >= 0.95 | ok |
-| verdict_accuracy | 1.00 | 16/16 | >= 0.95 | ok |
+| capture_precision | 1.00 | 33/33 | >= 0.95 | ok |
+| capture_recall | 1.00 | 32/32 | >= 0.95 | ok |
+| count_accuracy | 1.00 | 24/24 | >= 0.95 | ok |
+| verdict_accuracy | 1.00 | 22/22 | >= 0.95 | ok |
 | orphan_precision | 1.00 | 3/3 | >= 1.0 | ok |
 | orphan_recall | 1.00 | 3/3 | >= 1.0 | ok |
-| attribution_accuracy | 1.00 | 11/11 | >= 1.0 | ok |
-| decision_precision | 1.00 | 6/6 | >= 0.9 | ok |
-| decision_recall | 1.00 | 6/6 | >= 0.9 | ok |
-| unfinished_first | 1.00 | 2/2 | >= 1.0 | ok |
-| handoff_facts | 1.00 | 2/2 | >= 1.0 | ok |
+| attribution_accuracy | 1.00 | 12/12 | >= 1.0 | ok |
+| decision_precision | 1.00 | 9/9 | >= 0.9 | ok |
+| decision_recall | 1.00 | 8/8 | >= 0.9 | ok |
+| unfinished_first | 1.00 | 3/3 | >= 1.0 | ok |
+| handoff_facts | 1.00 | 5/5 | >= 1.0 | ok |
 | secret_leaks | 0 |  | <= 0 | ok |
 | injection_fenced | 1.00 | 1/1 | >= 1.0 | ok |
-| handoff_max_60_lines | 1.00 | 23/23 | >= 1.0 | ok |
+| handoff_max_60_lines | 1.00 | 30/30 | >= 1.0 | ok |
 
 | Case | Group | Result |
 | --- | --- | --- |
@@ -45,3 +45,10 @@ ghostkeep 0.3.1 · 23 labeled cases · python 3.12.12 · Windows
 | antigravity_stopped_mid_step | holdout | pass |
 | mixed_claimed_and_unknown_changes | holdout | pass |
 | everyday_decision_language | holdout | pass |
+| agent_writes_git_hook_and_ignored_file | realdata | pass |
+| same_decision_typed_into_two_tools | realdata | pass |
+| antigravity_cli_json_encoded_args | realdata | pass |
+| claude_deletes_file_with_bash | realdata | pass |
+| interrupted_before_any_edit | realdata | pass |
+| deleted_file_recreated_and_committed_later | realdata | pass |
+| codex_agents_md_preamble_is_not_the_task | realdata | pass |

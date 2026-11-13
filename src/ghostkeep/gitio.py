@@ -108,6 +108,15 @@ def is_ancestor(root: Path, older: str, newer: str) -> bool:
     return proc.returncode == 0
 
 
+def outside_git(root: Path, path: str) -> bool:
+    """True for files git never shows a change for: anything inside .git/ (hooks, config) and ignored files."""
+    if path == ".git" or path.startswith(".git/"):
+        return True
+    proc = subprocess.run(["git", "check-ignore", "-q", "--", path], cwd=root,
+                          capture_output=True, text=True)
+    return proc.returncode == 0
+
+
 def _count_lines(file: Path) -> int | None:
     try:
         data = file.read_bytes()

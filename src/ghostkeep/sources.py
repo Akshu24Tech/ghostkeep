@@ -126,7 +126,9 @@ class Session:
             by.setdefault(e.path, []).append(e)
         out = []
         for path, es in by.items():
-            if len(es) == 1:
+            if (es[-1].added, es[-1].removed) == DELETED:
+                out.append((path, *DELETED))  # whatever happened before, the file ends up deleted
+            elif len(es) == 1:
                 out.append((path, es[0].added, es[0].removed))
             else:
                 out.append((path, None, None))
@@ -191,6 +193,12 @@ def read_claude(path: Path, root: Path) -> Session:
                 if item.get("type") != "tool_use":
                     continue
                 name, inp = item.get("name"), item.get("input") or {}
+                if name == "Bash" and isinstance(inp.get("command"), str):
+                    found = shell_edits(inp["command"], root)  # rm, > redirects, Set-Content ...
+                    if found:
+                        s.touches_root = True
+                        s.edits += found
+                    continue
                 rel = relpath(inp.get("file_path") or inp.get("notebook_path") or "", root)
                 if not rel:
                     continue
@@ -230,6 +238,24 @@ _REQ = re.compile(r"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>", re.S)
 _PATH_KEYS = ("Path", "TargetFile", "AbsolutePath", "FilePath", "file_path", "path")
 
 
+def _ag_arg(value) -> str:
+    """Antigravity CLI stores each tool argument as a JSON-encoded string ('"a\\nb"'), the IDE as plain
+    text. Decode the first kind, or every multi-line edit reads as one line (seen on real data, 13 Nov)."""
+    v = str(value)
+    if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+        try:
+            out = json.loads(v)
+            if isinstance(out, str):
+                return out
+        except json.JSONDecodeError:
+            pass
+    return v
+
+
+# The edit tool's own result line: "Made 1 replacement in E:\\x\\a.py starting at line 1 (+36/-19 lines)."
+_AG_RESULT = re.compile(r"Made \d+ replacements? in (.+?) starting at line \d+ \(\+(\d+)/-(\d+) lines\)")
+
+
 def _ag_request(content: str) -> str:
     m = _REQ.search(content or "")
     return (m.group(1) if m else content or "").strip()
@@ -240,6 +266,7 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
     sid = path.parents[2].name  # brain/<id>/.system_generated/logs/transcript.jsonl
     s = Session(tool, sid, str(path), f"{st.st_size}:{int(st.st_mtime)}")
     last_status = None
+    pending: list[Edit] = []  # edits from the last tool call, waiting for the tool's own result line
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             o = json.loads(line)
@@ -258,12 +285,26 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
                 s.prompts.append((ts, text))
             if str(root).lower() in (o.get("content") or "").lower():
                 s.touches_root = True
+        elif t == "GENERIC" and pending:
+            # The tool reports exact counts even when the logged arguments were cut short.
+            m = _AG_RESULT.search(o.get("content") or "")
+            if m:
+                rel = relpath(m.group(1).replace("\\\\", "\\"), root)
+                for e in pending:
+                    if e.path == rel:
+                        e.added, e.removed = int(m.group(2)), int(m.group(3))
+            pending = []
         elif t == "PLANNER_RESPONSE":
             if (o.get("content") or "").strip() and not o.get("tool_calls"):
                 s.final = o["content"]
+            pending = []
             truncated = set(o.get("truncated_fields") or [])
+            if "tool_calls" in truncated:  # real data: whole tool_calls cut at 2,048 chars
+                truncated |= {"Target", "Replacement", "Content"}
             for tc in o.get("tool_calls") or []:
-                name, args = (tc.get("name") or "").lower(), tc.get("args") or {}
+                name = (tc.get("name") or "").lower()
+                args = {k: _ag_arg(v) for k, v in (tc.get("args") or {}).items()} \
+                    if isinstance(tc.get("args"), dict) else {}
                 if not any(k in name for k in ("edit", "write", "replace", "create_file")):
                     continue
                 raw = next((args[k] for k in _PATH_KEYS if args.get(k)), "")
@@ -274,10 +315,13 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
                 if "Target" in args and "Replacement" in args and not truncated & {"Target", "Replacement"}:
                     a, r = line_delta(str(args["Target"]), str(args["Replacement"]))
                     s.edits.append(Edit(rel, a, r))
+                    pending.append(s.edits[-1])
                 elif "Content" in args and "Content" not in truncated and str(args.get("Overwrite", "")).lower() != "true":
                     s.edits.append(Edit(rel, count_lines(str(args["Content"])), 0))
+                    pending.append(s.edits[-1])
                 else:
                     s.edits.append(Edit(rel, None, None))
+                    pending.append(s.edits[-1])
     if last_status and last_status != "DONE":
         s.interrupted = True
         s.status_note = f"last step status {last_status}"
@@ -326,6 +370,28 @@ _CODEX_SYNTAX_WRITES = [
     re.compile(r"(?<![>\d&-])>>?\s*(?P<p>[^\s;|&]+)"),
 ]
 _QUOTED = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'")
+# Deletes: rm / del / Remove-Item / git rm, then the paths until the next ; | & or newline.
+_SHELL_DELETE = re.compile(r"(?:^|[;&|]\s*|\n\s*)(?:git\s+rm|rm|del|erase|unlink|Remove-Item)\b(?P<args>[^;&|\n]*)", re.I)
+DELETED = (0, None)  # marker counts for a file the session deleted: "+0 -?" means gone
+
+
+def _shell_deletes(cmd: str, root: Path) -> list[Edit]:
+    out: list[Edit] = []
+    for m in _SHELL_DELETE.finditer(cmd):
+        for tok in re.findall(r"\"[^\"]+\"|'[^']+'|\S+", m.group("args")):
+            if tok.startswith("-"):
+                continue  # flags: -f, -r, -Force, --cached
+            rel = relpath(tok.strip("\"'"), root)
+            if rel and "." in Path(rel).name and "*" not in rel:
+                out.append(Edit(rel, *DELETED))
+    return out
+
+
+def shell_edits(cmd: str, root: Path) -> list[Edit]:
+    """Files a shell command writes or deletes (counts unknown for writes)."""
+    dels = _shell_deletes(cmd, root)
+    gone = {e.path for e in dels}
+    return [e for e in _codex_edits_from_cmd(cmd, root) if e.path not in gone] + dels
 
 
 def _codex_edits_from_cmd(cmd: str, root: Path) -> list[Edit]:
@@ -403,7 +469,7 @@ def read_codex(path: Path, root: Path) -> Session | None:
             s.model = p.get("model") or s.model
         elif p.get("type") == "message" and p.get("role") == "user":
             text = _codex_text(p.get("content")).strip()
-            if text and not text.startswith("<"):
+            if text and not text.startswith(("<", "# AGENTS.md instructions")):  # injected context, not the user
                 s.prompts.append((ts, text))
         elif p.get("type") == "message" and p.get("role") == "assistant":
             text = _codex_text(p.get("content")).strip()
@@ -419,7 +485,7 @@ def read_codex(path: Path, root: Path) -> Session | None:
             cmd = a.get("cmd") or a.get("command") or ""
             if isinstance(cmd, list):
                 cmd = " ".join(str(x) for x in cmd)
-            s.edits.extend(_codex_edits_from_cmd(cmd, root))
+            s.edits.extend(shell_edits(cmd, root))
         t = o.get("type")
         if t == "event_msg" and p.get("type") == "task_started":
             had_task = True

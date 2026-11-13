@@ -24,7 +24,7 @@ KNOWN_HEADERS = {"# Handoff", "## Unfinished", "## Recent sessions", "## Uncommi
                  "## Claimed but not on disk (pending in the IDE, or rejected)",
                  "## Decisions and preferences (user's words)"}
 CODE_TO_VERDICT = {"claimed_not_found": "not_on_disk", "count_mismatch": "mismatch",
-                   "untracked": "uncommitted", "not_committed": "uncommitted"}
+                   "untracked": "uncommitted", "not_committed": "uncommitted", "outside_git": "unchecked", "changed_later": "superseded"}
 
 # metric -> (target, lower_is_better)
 TARGETS = {
@@ -160,6 +160,9 @@ def score(name, label, obs, t: Tally, counts: dict):
         ok = u["tool"] in first and u["file"] in sec and u.get("absent", "\0") not in sec
         t.hit("unfinished_first", ok, name, f"first unfinished item: {first[:120]!r}")
 
+    dec_sec = text.split("## Decisions")[1] if "## Decisions" in text else ""
+    for s in label.get("handoff_once", []):  # once in the Decisions section
+        t.hit("handoff_facts", dec_sec.count(s) == 1, name, f"Decisions shows {s!r} {dec_sec.count(s)} times")
     for s in label.get("handoff_has", []):
         t.hit("handoff_facts", s in text, name, f"handoff lacks {s!r}")
 

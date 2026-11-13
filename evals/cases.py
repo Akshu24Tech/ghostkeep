@@ -365,3 +365,122 @@ def everyday_decision_language(w):
     return {"claims": {"s1": {"tool": "claude-code", "files": {"README.md": (1, 1)}}},
             "decisions": {"Let's use SQLite instead of Postgres for the tests.", "Don't add a paid API.",
                           "We never push straight to main."}}
+
+
+# ---------------------------------------------------------------- found on real data (13 Nov 2026)
+
+@case("realdata")
+def agent_writes_git_hook_and_ignored_file(w):
+    """Real session: Antigravity CLI wrote .git/hooks/pre-commit. git never shows .git/ or ignored files,
+    so 'no change in git' was reported as 'claimed but not on disk' while the hook was right there."""
+    seed(w)
+    w.write(".gitignore", "*.log\n")
+    w.commit("ignore logs", date="2026-11-01T00:00:00")
+    hook = w.repo / ".git/hooks/pre-commit"
+    w.ag_session("cli", "h1", [ag_user("always run the tests before committing", w.repo),
+                               ag_write(str(hook), "#!/bin/sh\npytest -q\n"),
+                               ag_write(w.abs("debug.log"), "trace\n"),
+                               ag_write(w.abs("missing.log"), "gone\n"),
+                               ag_say("Added a pre-commit hook.")])
+    hook.write_text("#!/bin/sh\npytest -q\n")
+    w.write("debug.log", "trace\n")
+    return {"claims": {"h1": {"tool": "antigravity-cli",
+                              "files": {".git/hooks/pre-commit": (2, 0), "debug.log": (1, 0), "missing.log": (1, 0)}}},
+            "verdicts": {("h1", ".git/hooks/pre-commit"): "unchecked", ("h1", "debug.log"): "unchecked",
+                         ("h1", "missing.log"): "not_on_disk"},
+            "orphans": set(), "handoff_has": ["git doesn't track it"],
+            "decisions": {"always run the tests before committing"}}
+
+
+@case("realdata")
+def same_decision_typed_into_two_tools(w):
+    """Real session: the same instruction given to Codex, then to Antigravity, showed up twice."""
+    seed(w)
+    words = "lets use SQLite instead of JSON, then always run the tests before committing"
+    w.codex_session("rollout-2026-11-11T09-00-00-x.jsonl", [cx_meta(w.repo, w.head()), cx_user(words),
+                                                           cx_say("Planning.")])
+    w.ag_session("cli", "d2", [ag_user(words, w.repo, ts="2026-11-11T11:00:00Z"),
+                               ag_edit(w.abs("README.md"), "A group chat agent.", "A group chat agent on SQLite.",
+                                       ts="2026-11-11T11:01:00Z"),
+                               ag_say("Done.", ts="2026-11-11T11:02:00Z")])
+    w.write("README.md", "# TeamCaptain\nA group chat agent on SQLite.\n")
+    return {"claims": {"d2": {"tool": "antigravity-cli", "files": {"README.md": (1, 1)}}},
+            "decisions": {words}, "handoff_once": [words.replace('"', "'")[:60]]}
+
+
+@case("realdata")
+def antigravity_cli_json_encoded_args(w):
+    """Real session: Antigravity CLI writes every edit argument as a JSON string, so a 3-line to 5-line
+    edit was read as one line replacing one line (+1 -1). Git and the tool both said otherwise."""
+    import json as _j
+    seed(w)
+    old = "flask==3.0.3\nflask-cors==4.0.1\ngoogle-generativeai>=0.8.0\n"
+    new = old + "google-genai>=0.1.0\npytest>=8.0.0\n"
+    w.write("backend/requirements.txt", old)
+    w.commit("reqs", date="2026-11-01T00:00:00")
+    w.ag_session("cli", "j1", [ag_user("add pytest to requirements", w.repo),
+                               ag("PLANNER_RESPONSE", ts="2026-11-10T15:31:00Z", tool_calls=[{"name": "edit_file", "args": {
+                                   "Path": _j.dumps(w.abs("backend/requirements.txt")),
+                                   "Target": _j.dumps(old.rstrip("\n")), "Replacement": _j.dumps(new.rstrip("\n"))}}]),
+                               ag_say("Added pytest.")])
+    w.write("backend/requirements.txt", new)
+    return {"claims": {"j1": {"tool": "antigravity-cli", "files": {"backend/requirements.txt": (2, 0)}}},
+            "verdicts": {("j1", "backend/requirements.txt"): "uncommitted"}, "orphans": set()}
+
+
+def _c_bash(cmd, ts="2026-11-10T15:52:00Z"):
+    return {"type": "assistant", "timestamp": ts, "message": {"model": "claude-opus-5", "role": "assistant",
+            "content": [{"type": "tool_use", "name": "Bash", "input": {"command": cmd}}]}}
+
+
+@case("realdata")
+def claude_deletes_file_with_bash(w):
+    """Real session: Claude Code ran `rm demo.md` through Bash. Only Edit/Write were read, so the
+    session vanished and the deletion showed as a change nobody claimed."""
+    seed(w)
+    w.write("demo.md", "demo\n")
+    w.write("notes.txt", "x\n")
+    w.commit("demo", date="2026-11-01T00:00:00")
+    w.claude_session("b1", [c_user("delete demo.md"), _c_bash("rm demo.md"),
+                            _c_bash("ls -la && cat notes.txt"), c_say("demo.md is deleted.")])
+    (w.repo / "demo.md").unlink()
+    return {"claims": {"b1": {"tool": "claude-code", "files": {"demo.md": None}}},
+            "verdicts": {("b1", "demo.md"): "uncommitted"}, "orphans": set(),
+            "owners": {"demo.md": "claude-code"}}
+
+
+@case("realdata")
+def interrupted_before_any_edit(w):
+    """Real session: 'add a notes add command' was stopped before Claude changed a file. It was dropped,
+    but an interrupted task is exactly what the next agent must see first."""
+    seed(w)
+    w.claude_session("i1", [c_user("add a notes add command"), c_interrupt()])
+    return {"claims": {"i1": {"tool": "claude-code", "files": {}, "interrupted": True}},
+            "orphans": set(), "unfinished": {"tool": "claude-code", "file": "none yet"}}
+
+
+@case("realdata")
+def deleted_file_recreated_and_committed_later(w):
+    """Real session: Claude deleted demo.md, another agent wrote a new demo.md and committed it. Saying
+    'claimed but not on disk (pending or rejected)' was wrong: the delete happened, then the file came back."""
+    seed(w)
+    w.write("demo.md", "hi\n")
+    w.commit("demo", date="2026-11-01T00:00:00")
+    w.claude_session("r1", [c_user("delete demo.md"), _c_bash("rm demo.md"), c_say("Deleted.")])
+    w.write("demo.md", "# Ghostkeep guide\n")
+    w.commit("guide", date="2026-11-10T17:00:00")
+    return {"claims": {"r1": {"tool": "claude-code", "files": {"demo.md": None}}},
+            "verdicts": {("r1", "demo.md"): "superseded"}, "orphans": set()}
+
+
+@case("realdata")
+def codex_agents_md_preamble_is_not_the_task(w):
+    """Real session: Codex logs AGENTS.md as the first 'user' message; it was shown as what was asked."""
+    seed(w)
+    w.codex_session("rollout-2026-11-13T17-40-57-y", [cx_meta(w.repo, w.head()),
+                    cx_user("# AGENTS.md instructions\n\n<INSTRUCTIONS>\n# linkedin-dm\n</INSTRUCTIONS>"),
+                    cx_user("add api link in api_plan.md"),
+                    cx_exec("Add-Content -Path API_PLAN.md -Value 'link'"), cx_say("Added."), cx_event("task_complete")])
+    w.write("API_PLAN.md", "link\n")
+    return {"claims": {"rollout-2026-11-13T17-40-57-y.jsonl": {"tool": "codex", "files": {"API_PLAN.md": None}}},
+            "handoff_has": ["asked: \"add api link in api_plan.md\""]}

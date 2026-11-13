@@ -11,7 +11,7 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.3. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> Status: v0.3.2, early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
@@ -106,13 +106,15 @@ and decision/preference capture from the user's own words.
 
 ```bash
 python -m pytest -q          # unit tests
-python evals/run.py          # 23 labeled cases scored on 15 metrics, writes evals/RESULTS.md
+python evals/run.py          # 30 labeled cases scored on 15 metrics, writes evals/RESULTS.md
 python evals/run.py --gate   # exit 1 if any metric is below target (what CI runs)
+python evals/label_real.py   # label Ghostkeep's output on your own sessions, then --score
 ```
 
 The eval cases are small fake projects with session logs in each tool's real format and the right answer
 written down: claimed files and line counts, verdicts, orphans, who changed what, decisions captured,
 unfinished work first, plus adversarial cases (planted instructions in an agent's message, secrets,
-malformed logs, sessions from another repo). Latest numbers: [evals/RESULTS.md](evals/RESULTS.md).
+malformed logs, sessions from another repo). Cases in the `realdata` group reproduce bugs found by
+labeling real sessions. Latest numbers: [evals/RESULTS.md](evals/RESULTS.md).
 How Ghostkeep scores against an agentic system design review, and what's left:
 [docs/DESIGN_AUDIT.md](docs/DESIGN_AUDIT.md).

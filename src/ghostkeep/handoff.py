@@ -9,7 +9,7 @@ from . import check, gitio, ledger
 MAX_LINES = 60
 LABEL = {"verified": "verified", "uncommitted": "matches claim, not committed",
          "mismatch": "DOES NOT MATCH what the agent said", "superseded": "superseded by a later session",
-         "orphan": "changed, but no session claims it"}
+         "orphan": "changed, but no session claims it", "no_files": "no file changes"}
 
 
 def _short(ts: str | None) -> str:
@@ -55,7 +55,7 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
             L.append(f"- **{c.tool}** ({_short(c.ts)}) was asked: {quote(c.asked)}")
             for o in c.open[:3]:
                 L.append(f"  - open: {quote(o, 200)}")
-            L.append(f"  - files touched: {', '.join(f.path for f in c.files)[:200]}")
+            L.append(f"  - files touched: {', '.join(f.path for f in c.files)[:200] or 'none yet'}")
         L.append("")
 
     # 2. Recent sessions, newest first, with their checked status.
@@ -72,6 +72,10 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
                 for f in r.findings[:3]:
                     if f.code in ("count_mismatch", "claimed_not_found"):
                         L.append(f"  - `{f.path}`: claimed {f.expected}, git shows {f.actual}")
+                    elif f.code == "changed_later":
+                        L.append(f"  - `{f.path}`: deleted by this session, re-created later by another session or by hand")
+                    elif f.code == "outside_git":
+                        L.append(f"  - `{f.path}`: exists, but git doesn't track it, so the edit can't be checked")
         L.append("")
 
     # 2b. Claimed edits that never reached disk: still pending in the IDE, or rejected.
@@ -108,11 +112,19 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
         L.append("")
 
     # 4. Decisions in the user's own words.
-    decs = [r for r in records if r.get("kind") in ("decision", "preference")][-6:]
+    # The same words typed into two tools are one decision: show it once, newest first, with every tool.
+    by_text: dict[str, dict] = {}
+    for r in records:
+        if r.get("kind") in ("decision", "preference"):
+            key = " ".join(r["text"].lower().split())
+            prev = by_text.pop(key, None)
+            tools = (prev["tools"] if prev else []) + [r.get("tool")]
+            by_text[key] = {**r, "tools": list(dict.fromkeys(t for t in tools if t))}
+    decs = list(by_text.values())[-6:]
     if decs:
         L.append("## Decisions and preferences (user's words)")
         for d in decs[::-1]:
-            L.append(f"- {quote(d['text'], 200)} ({d.get('tool')}, {_short(d.get('ts'))})")
+            L.append(f"- {quote(d['text'], 200)} ({', '.join(d['tools'][::-1])}, {_short(d.get('ts'))})")
         L.append("")
 
     L.append("Full history: `.ghostkeep/ledger.jsonl`. Re-check: `ghostkeep check`.")
