@@ -11,7 +11,7 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.3.2, early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> Status: v0.4.0 (state layer), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
@@ -70,6 +70,26 @@ ghostkeep show
       no_claim          stray.py  (untracked)
 ```
 
+## Decisions over time
+
+A handoff is a budgeted slice; `.ghostkeep/STATE.md` is the full picture, rebuilt from the ledger on
+every `ghostkeep handoff` (or `ghostkeep state`). No LLM, nothing in the ledger is ever rewritten.
+
+- **Decisions stay pinned** while they're in force, however many sessions came after.
+- **A decision is replaced only on explicit wording** ("SQLite instead of JSON", "switch from Flask",
+  "no longer use Redis") that names something an older decision used. Shared words alone never replace anything.
+- **Unfinished work stays open** until a later session finishes it (same request, or same files
+  checked against git), not just for the last three sessions.
+- **You can correct it**, and your call always wins:
+
+```bash
+ghostkeep state                      # what's in force, what's open, what was replaced
+ghostkeep retire d_1a2b              # this decision no longer holds
+ghostkeep supersede d_1a2b d_9f8e    # d_9f8e replaced d_1a2b
+ghostkeep done e_77c1                # that unfinished task is finished
+ghostkeep reopen d_1a2b              # undo any of the above
+```
+
 ## Statuses
 
 | Status | Means |
@@ -106,7 +126,7 @@ and decision/preference capture from the user's own words.
 
 ```bash
 python -m pytest -q          # unit tests
-python evals/run.py          # 30 labeled cases scored on 15 metrics, writes evals/RESULTS.md
+python evals/run.py          # 37 labeled cases scored on 17 metrics, writes evals/RESULTS.md
 python evals/run.py --gate   # exit 1 if any metric is below target (what CI runs)
 python evals/label_real.py   # label Ghostkeep's output on your own sessions, then --score
 ```

@@ -484,3 +484,98 @@ def codex_agents_md_preamble_is_not_the_task(w):
     w.write("API_PLAN.md", "link\n")
     return {"claims": {"rollout-2026-11-13T17-40-57-y.jsonl": {"tool": "codex", "files": {"API_PLAN.md": None}}},
             "handoff_has": ["asked: \"add api link in api_plan.md\""]}
+
+
+# ---------------------------------------------------------------- long run: the state layer
+
+def _day(n, h=10):
+    return f"2026-11-{n:02d}T{h:02d}:00:00Z"
+
+
+def _sessions_with_decisions(w, texts, start_day=2):
+    """One finished Claude session per text, each a day apart, each touching its own file."""
+    for k, words in enumerate(texts):
+        d = start_day + k
+        path = f"notes/n{k}.md"
+        w.claude_session(f"x{k}", [c_user(words, ts=_day(d)), c_write(w.abs(path), "x\n", ts=_day(d, 11)),
+                                   c_say("Done.", ts=_day(d, 12))])
+        w.write(path, "x\n")
+        w.commit(f"n{k}", date=_day(d, 13).replace("Z", ""))
+
+
+@case("longrun")
+def old_decision_survives_many_sessions(w):
+    """Day 1 rule, then 10 sessions with their own decisions. v0.3 showed only the last 6."""
+    seed(w)
+    w.claude_session("d1", [c_user("We never use paid APIs in this project.", ts=_day(1)),
+                            c_edit(w.abs("README.md"), "A group chat agent.\n", "A free group chat agent.\n",
+                                   ts=_day(1, 11)), c_say("Noted.", ts=_day(1, 12))])
+    w.write("README.md", "# TeamCaptain\nA free group chat agent.\n")
+    w.commit("free", date=_day(1, 13).replace("Z", ""))
+    _sessions_with_decisions(w, [f"Let's use library{k} for module{k}." for k in range(10)])
+    return {"capture": False, "in_force": ["We never use paid APIs in this project.", "Let's use library9 for module9."]}
+
+
+@case("longrun")
+def reversal_supersedes_old_decision(w):
+    seed(w)
+    _sessions_with_decisions(w, ["Let's use JSON files for storage.", "Let's use pytest for every test.",
+                                 "Let's use SQLite instead of JSON."])
+    return {"capture": False, "in_force": ["Let's use SQLite instead of JSON.", "Let's use pytest for every test."],
+            "not_in_force": ["Let's use JSON files for storage."], "handoff_has": ["1 earlier decision(s) replaced"]}
+
+
+@case("longrun")
+def no_supersede_without_explicit_reversal(w):
+    """Shared words are not a reversal: both decisions stay in force."""
+    seed(w)
+    _sessions_with_decisions(w, ["Let's use the free Gemini tier for storage summaries.",
+                                 "Don't add a paid API for storage.", "Let's go with SQLite for storage."])
+    return {"capture": False, "in_force": ["Let's use the free Gemini tier for storage summaries.", "Don't add a paid API for storage.",
+                         "Let's go with SQLite for storage."]}
+
+
+@case("longrun")
+def user_retires_and_supersedes(w):
+    seed(w)
+    _sessions_with_decisions(w, ["Let's use Flask for the API.", "Let's keep the bot on Telegram only.",
+                                 "Let's use FastAPI for the API.", "We always run the tests before committing."])
+    return {"capture": False, "events": [("retire", "Telegram only", None), ("supersede", "Flask", "FastAPI")],
+            "in_force": ["Let's use FastAPI for the API.", "We always run the tests before committing."],
+            "not_in_force": ["Let's keep the bot on Telegram only.", "Let's use Flask for the API."]}
+
+
+@case("longrun")
+def interrupted_task_stays_until_finished(w):
+    """Claude was cut off on dates.py, then 5 sessions did other things. v0.3 lost it after 3."""
+    seed(w)
+    w.claude_session("cut", [c_user("Add 'give me 3 days' parsing to tc/extraction/dates.py", ts=_day(1)),
+                             c_edit(w.abs("tc/extraction/dates.py"), "    return None\n",
+                                    "    return None\nDUR = 3\n", ts=_day(1, 11)), c_interrupt(ts=_day(1, 12))])
+    w.write("tc/extraction/dates.py", BASE_DATES + "DUR = 3\n")
+    w.commit("wip", date=_day(1, 13).replace("Z", ""))
+    _sessions_with_decisions(w, [f"tidy file {k}" for k in range(5)])
+    return {"capture": False, "unfinished": {"tool": "claude-code", "file": "tc/extraction/dates.py"}}
+
+
+@case("longrun")
+def thread_closed_when_next_tool_finishes_it(w):
+    seed(w)
+    w.claude_session("cut", [c_user("Add DUR to tc/extraction/dates.py", ts=_day(1)),
+                             c_edit(w.abs("tc/extraction/dates.py"), "    return None\n",
+                                    "    return None\nDUR = 3\n", ts=_day(1, 11)), c_interrupt(ts=_day(1, 12))])
+    w.ag_session("cli", "fin", [ag_user("Finish the DUR change in tc/extraction/dates.py", w.repo, ts=_day(2)),
+                                ag_edit(w.abs("tc/extraction/dates.py"), "DUR = 3", "DUR = 3\nDUR_RE = 1",
+                                        ts=_day(2, 11)), ag_say("Finished.", ts=_day(2, 12))])
+    w.write("tc/extraction/dates.py", BASE_DATES + "DUR = 3\nDUR_RE = 1\n")
+    return {"capture": False, "handoff_lacks": ["## Unfinished"]}
+
+
+@case("longrun")
+def fifty_decisions_fit_the_budget(w):
+    seed(w)
+    words = " ".join(f"Let's use tool{k} for job{k}." for k in range(50))
+    w.claude_session("many", [c_user(words), c_edit(w.abs("README.md"), "A group chat agent.\n", "A bot.\n"),
+                              c_say("Ok.")])
+    w.write("README.md", "# TeamCaptain\nA bot.\n")
+    return {"capture": False, "in_force": ["Let's use tool49 for job49."], "handoff_has": ["38 more in force"]}

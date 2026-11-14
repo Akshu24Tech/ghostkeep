@@ -4,9 +4,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from . import check, gitio, ledger
+from . import check, gitio, ledger, state
 
 MAX_LINES = 60
+MAX_DECISIONS = 12
 LABEL = {"verified": "verified", "uncommitted": "matches claim, not committed",
          "mismatch": "DOES NOT MATCH what the agent said", "superseded": "superseded by a later session",
          "orphan": "changed, but no session claims it", "no_files": "no file changes"}
@@ -44,18 +45,33 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
         "",
     ]
 
-    # 1. Unfinished work first: this is what the Day 1 scenario 3 agent got wrong.
+    # 1. Unfinished work first: this is what the Day 1 scenario 3 agent got wrong. Threads stay open until a
+    # later session finishes them (or the user runs `ghostkeep done`), however many sessions came since.
+    statuses = {r.entry: r.status for r in results if r.entry}
+    st = state.build(records, statuses)
     latest_by_session: dict[str, ledger.Claim] = {}
     for c in claims:
         latest_by_session[c.session or c.id] = c
-    unfinished = [c for c in latest_by_session.values() if c.interrupted or c.open]
-    if unfinished:
+    threads = st.open_threads()
+    if threads:
         L.append("## Unfinished")
-        for c in unfinished[-3:]:
-            L.append(f"- **{c.tool}** ({_short(c.ts)}) was asked: {quote(c.asked)}")
-            for o in c.open[:3]:
-                L.append(f"  - open: {quote(o, 200)}")
-            L.append(f"  - files touched: {', '.join(f.path for f in c.files)[:200] or 'none yet'}")
+        for t in threads[::-1][:4]:
+            L.append(f"- **{t.tools[0]}** ({_short(t.ts)}) stopped before finishing: {quote(t.text, 200)}")
+            L.append(f"  - files touched: {', '.join(t.files)[:200] or 'none yet'} · id `{t.id}`")
+        if len(threads) > 4:
+            L.append(f"- \u2026{len(threads) - 4} older, see `.ghostkeep/STATE.md`")
+        L.append("")
+
+    # 1b. Decisions still in force, pinned: an old rule doesn't scroll away because newer sessions happened.
+    act = st.active()
+    if act:
+        L.append("## Decisions and preferences in force (user's words)")
+        for d in act[::-1][:MAX_DECISIONS]:
+            L.append(f"- {quote(d.text, 200)} ({', '.join(d.tools[::-1])}, {_short(d.ts)})")
+        if len(act) > MAX_DECISIONS:
+            L.append(f"- \u2026and {len(act) - MAX_DECISIONS} more in force: see `.ghostkeep/STATE.md`")
+        if st.replaced():
+            L.append(f"- ({len(st.replaced())} earlier decision(s) replaced or retired: not listed, see STATE.md)")
         L.append("")
 
     # 2. Recent sessions, newest first, with their checked status.
@@ -111,23 +127,7 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
             L.append(f"- \u2026and {len(dirty) - 12} more")
         L.append("")
 
-    # 4. Decisions in the user's own words.
-    # The same words typed into two tools are one decision: show it once, newest first, with every tool.
-    by_text: dict[str, dict] = {}
-    for r in records:
-        if r.get("kind") in ("decision", "preference"):
-            key = " ".join(r["text"].lower().split())
-            prev = by_text.pop(key, None)
-            tools = (prev["tools"] if prev else []) + [r.get("tool")]
-            by_text[key] = {**r, "tools": list(dict.fromkeys(t for t in tools if t))}
-    decs = list(by_text.values())[-6:]
-    if decs:
-        L.append("## Decisions and preferences (user's words)")
-        for d in decs[::-1]:
-            L.append(f"- {quote(d['text'], 200)} ({', '.join(d['tools'][::-1])}, {_short(d.get('ts'))})")
-        L.append("")
-
-    L.append("Full history: `.ghostkeep/ledger.jsonl`. Re-check: `ghostkeep check`.")
+    L.append("Full state: `.ghostkeep/STATE.md`. History: `.ghostkeep/ledger.jsonl`. Re-check: `ghostkeep check`.")
     if len(L) > MAX_LINES:
         L = L[: MAX_LINES - 1] + ["(trimmed to 60 lines)"]
     return "\n".join(L) + "\n"

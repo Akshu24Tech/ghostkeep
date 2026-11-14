@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, check, gitio, handoff, ledger, sync
+from . import __version__, check, gitio, handoff, ledger, sync, state
 
 PROBLEM = {"mismatch", "orphan", "corrupt"}
 MARK = {"verified": "OK ", "uncommitted": "UNC", "mismatch": "BAD", "superseded": "OLD",
@@ -92,8 +92,47 @@ def cmd_handoff(a: argparse.Namespace) -> int:
     results = check.run(root)
     text = handoff.build(root, results)
     p = handoff.write(root, text)
+    state.write(root, state.build(ledger.read(root), {r.entry: r.status for r in results if r.entry}))
     print(text)
     print(f"(written to {p.relative_to(root)})", file=sys.stderr)
+    return 0
+
+
+def _state(root: Path) -> state.State:
+    results = check.run(root, write=False)
+    return state.build(ledger.read(root), {r.entry: r.status for r in results if r.entry})
+
+
+def cmd_state(_: argparse.Namespace) -> int:
+    root = _root()
+    st = _state(root)
+    p = state.write(root, st)
+    print(state.render(st))
+    print(f"(written to {p.relative_to(root)})", file=sys.stderr)
+    return 0
+
+
+def cmd_change(a: argparse.Namespace) -> int:
+    """retire / supersede / done / reopen: the user's own corrections, appended to the ledger."""
+    root = _root()
+    st = _state(root)
+    it = st.find(a.id)
+    if it is None:
+        print(f"no decision or thread with id {a.id!r}. See `ghostkeep state`.", file=sys.stderr)
+        return 2
+    by = None
+    if a.op == "supersede":
+        new = st.find(a.new)
+        if new is None or new.kind == "thread":
+            print(f"no decision with id {a.new!r}", file=sys.stderr)
+            return 2
+        by = new.id
+    if a.op in ("retire", "supersede") and it.kind == "thread" or a.op == "done" and it.kind != "thread":
+        print(f"`{a.op}` doesn't apply to a {it.kind}", file=sys.stderr)
+        return 2
+    state.record(root, a.op, it.id, by=by, note=a.note)
+    state.write(root, _state(root))
+    print(f"{a.op}: {it.id} {it.text[:80]!r}")
     return 0
 
 
@@ -146,6 +185,18 @@ def main(argv: list[str] | None = None) -> int:
     ho.add_argument("--days", type=float, default=14)
     ho.add_argument("--no-sync", action="store_true")
     ho.set_defaults(fn=cmd_handoff)
+
+    sub.add_parser("state", help="decisions in force and open threads; writes .ghostkeep/STATE.md") \
+        .set_defaults(fn=cmd_state)
+    for op, hlp in (("retire", "a decision or preference no longer holds"),
+                    ("supersede", "a decision was replaced by a newer one"),
+                    ("done", "an open thread is finished"), ("reopen", "undo retire/supersede/done")):
+        c = sub.add_parser(op, help=hlp)
+        c.add_argument("id", help="id from `ghostkeep state` (a unique prefix is enough)")
+        if op == "supersede":
+            c.add_argument("new", help="id of the decision that replaces it")
+        c.add_argument("--note")
+        c.set_defaults(fn=cmd_change, op=op, new=None)
 
     sh = sub.add_parser("show", help="recent claims with their latest status")
     sh.add_argument("-n", type=int, default=10)

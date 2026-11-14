@@ -1,6 +1,6 @@
 # Ghostkeep eval results
 
-ghostkeep 0.3.2 · 30 labeled cases · python 3.11.15 · Windows
+ghostkeep 0.4.0 · 37 labeled cases · python 3.11.15 · Windows
 
 | Metric | Value | Items | Target | |
 | --- | --- | --- | --- | --- |
@@ -14,11 +14,13 @@ ghostkeep 0.3.2 · 30 labeled cases · python 3.11.15 · Windows
 | attribution_accuracy | 1.00 | 12/12 | >= 1.0 | ok |
 | decision_precision | 1.00 | 9/9 | >= 0.9 | ok |
 | decision_recall | 1.00 | 8/8 | >= 0.9 | ok |
-| unfinished_first | 1.00 | 3/3 | >= 1.0 | ok |
-| handoff_facts | 1.00 | 5/5 | >= 1.0 | ok |
+| unfinished_first | 1.00 | 4/4 | >= 1.0 | ok |
+| handoff_facts | 1.00 | 8/8 | >= 1.0 | ok |
+| state_recall | 1.00 | 10/10 | >= 1.0 | ok |
+| superseded_leak | 0 |  | <= 0 | ok |
 | secret_leaks | 0 |  | <= 0 | ok |
 | injection_fenced | 1.00 | 1/1 | >= 1.0 | ok |
-| handoff_max_60_lines | 1.00 | 30/30 | >= 1.0 | ok |
+| handoff_max_60_lines | 1.00 | 37/37 | >= 1.0 | ok |
 
 | Case | Group | Result |
 | --- | --- | --- |
@@ -52,3 +54,10 @@ ghostkeep 0.3.2 · 30 labeled cases · python 3.11.15 · Windows
 | interrupted_before_any_edit | realdata | pass |
 | deleted_file_recreated_and_committed_later | realdata | pass |
 | codex_agents_md_preamble_is_not_the_task | realdata | pass |
+| old_decision_survives_many_sessions | longrun | pass |
+| reversal_supersedes_old_decision | longrun | pass |
+| no_supersede_without_explicit_reversal | longrun | pass |
+| user_retires_and_supersedes | longrun | pass |
+| interrupted_task_stays_until_finished | longrun | pass |
+| thread_closed_when_next_tool_finishes_it | longrun | pass |
+| fifty_decisions_fit_the_budget | longrun | pass |

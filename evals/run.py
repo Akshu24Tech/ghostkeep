@@ -16,13 +16,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent / "src")]
 
-from ghostkeep import __version__, check, handoff, ledger, sync  # noqa: E402
+from ghostkeep import __version__, check, handoff, ledger, state, sync  # noqa: E402
 from cases import CASES  # noqa: E402
 from harness import world  # noqa: E402
 
 KNOWN_HEADERS = {"# Handoff", "## Unfinished", "## Recent sessions", "## Uncommitted changes",
                  "## Claimed but not on disk (pending in the IDE, or rejected)",
-                 "## Decisions and preferences (user's words)"}
+                 "## Decisions and preferences in force (user's words)"}
 CODE_TO_VERDICT = {"claimed_not_found": "not_on_disk", "count_mismatch": "mismatch",
                    "untracked": "uncommitted", "not_committed": "uncommitted", "outside_git": "unchecked", "changed_later": "superseded"}
 
@@ -35,6 +35,7 @@ TARGETS = {
     "attribution_accuracy": (1.0, False),
     "decision_precision": (0.9, False), "decision_recall": (0.9, False),
     "unfinished_first": (1.0, False), "handoff_facts": (1.0, False),
+    "state_recall": (1.0, False), "superseded_leak": (0, True),
     "secret_leaks": (0, True), "injection_fenced": (1.0, False), "handoff_max_60_lines": (1.0, False),
 }
 
@@ -69,6 +70,10 @@ def run_case(fn):
             ledger.init(w.repo)
             sync.run(w.repo, days=3650)
             results = check.run(w.repo)
+            for op, target, new in label.get("events", []):  # the user's own corrections, by text
+                st = state.build(ledger.read(w.repo))
+                find = lambda t: next(i.id for i in st.decisions + st.threads if t in i.text)  # noqa: E731
+                state.record(w.repo, op, find(target), by=find(new) if new else None)
             text = handoff.build(w.repo, results)
             raw_ledger = ledger.ledger_path(w.repo).read_text(encoding="utf-8")
             records = ledger.read(w.repo)
@@ -116,7 +121,7 @@ def score(name, label, obs, t: Tally, counts: dict):
             if exp.get("interrupted") is not None:
                 t.hit("capture_recall", got.interrupted == exp["interrupted"], name, f"{sid} interrupted flag")
     labeled = {(s, p) for s, e in label.get("claims", {}).items() for p in e["files"]}
-    for sid, c in claims.items():
+    for sid, c in (claims.items() if label.get("capture", True) else ()):  # long-run cases score state only
         for f in c.files:
             ok = (sid, f.path) in labeled
             t.hit("capture_precision", ok, name, f"invented {sid}:{f.path}")
@@ -160,7 +165,16 @@ def score(name, label, obs, t: Tally, counts: dict):
         ok = u["tool"] in first and u["file"] in sec and u.get("absent", "\0") not in sec
         t.hit("unfinished_first", ok, name, f"first unfinished item: {first[:120]!r}")
 
-    dec_sec = text.split("## Decisions")[1] if "## Decisions" in text else ""
+    dec_sec = text.split("## Decisions")[1].split("\n## ")[0] if "## Decisions" in text else ""
+    for s in label.get("in_force", []):
+        t.hit("state_recall", s in dec_sec, name, f"decision in force missing from handoff: {s!r}")
+    for s in label.get("not_in_force", []):
+        leaked = s in dec_sec
+        counts["superseded_leak"] += leaked
+        if leaked:
+            t.fail["superseded_leak"].append(f"{name}: replaced decision still shown: {s!r}")
+    for s in label.get("handoff_lacks", []):
+        t.hit("handoff_facts", s not in text, name, f"handoff should not contain {s!r}")
     for s in label.get("handoff_once", []):  # once in the Decisions section
         t.hit("handoff_facts", dec_sec.count(s) == 1, name, f"Decisions shows {s!r} {dec_sec.count(s)} times")
     for s in label.get("handoff_has", []):
@@ -206,7 +220,7 @@ def main():
 
     rows, gate_ok = [], True
     for m, (target, lower) in TARGETS.items():
-        if m in ("crashes", "secret_leaks"):
+        if m in ("crashes", "secret_leaks", "superseded_leak"):
             val, shown, n = counts[m], str(counts[m]), ""
             ok = val <= target
         else:
