@@ -116,7 +116,7 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
         owners = check.covering_claims(root, claims, results, dirty)
         L.append("## Uncommitted changes")
         for p in sorted(dirty)[:12]:
-            kind = "new file" if dirty[p] == "??" else "modified"
+            kind = "new file" if dirty[p] == "??" else "deleted" if "D" in dirty[p] else "modified"
             who = []
             for c in owners.get(p, [])[:3]:
                 r = status.get(c.id)

@@ -446,7 +446,7 @@ def claude_deletes_file_with_bash(w):
     (w.repo / "demo.md").unlink()
     return {"claims": {"b1": {"tool": "claude-code", "files": {"demo.md": None}}},
             "verdicts": {("b1", "demo.md"): "uncommitted"}, "orphans": set(),
-            "owners": {"demo.md": "claude-code"}}
+            "owners": {"demo.md": "claude-code"}, "handoff_has": ["`demo.md` (deleted)"]}
 
 
 @case("realdata")
