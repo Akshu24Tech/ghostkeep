@@ -216,10 +216,20 @@ def read_claude(path: Path, root: Path) -> Session:
 
 
 def claude_sessions(root: Path, since: float) -> list[Session]:
-    d = claude_dir() / claude_slug(root)
-    if not d.is_dir():
+    try:
+        d = claude_dir() / claude_slug(root)
+        if not d.is_dir():
+            return []
+        out = []
+        for p in sorted(d.glob("*.jsonl")):
+            try:
+                if p.stat().st_mtime >= since:
+                    out.append(read_claude(p, root))
+            except OSError:
+                continue
+        return out
+    except OSError:
         return []
-    return [read_claude(p, root) for p in sorted(d.glob("*.jsonl")) if p.stat().st_mtime >= since]
 
 
 # --- Antigravity (IDE agent and CLI share one format) ----------------------------------
@@ -331,19 +341,22 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
 def antigravity_sessions(root: Path, since: float) -> list[Session]:
     out, needle = [], root.name.lower()
     for tool, base in antigravity_dirs():
-        if not base.is_dir():
-            continue
-        for p in base.glob("*/.system_generated/logs/transcript.jsonl"):
-            try:
-                if p.stat().st_mtime < since:
-                    continue
-                if needle not in p.read_text(encoding="utf-8", errors="replace").lower():
-                    continue  # cheap prefilter
-                s = read_antigravity(p, tool, root)
-            except OSError:
+        try:
+            if not base.is_dir():
                 continue
-            if s.touches_root:
-                out.append(s)
+            for p in base.glob("*/.system_generated/logs/transcript.jsonl"):
+                try:
+                    if p.stat().st_mtime < since:
+                        continue
+                    if needle not in p.read_text(encoding="utf-8", errors="replace").lower():
+                        continue  # cheap prefilter
+                    s = read_antigravity(p, tool, root)
+                except OSError:
+                    continue
+                if s.touches_root:
+                    out.append(s)
+        except OSError:
+            continue
     return out
 
 
@@ -498,22 +511,25 @@ def read_codex(path: Path, root: Path) -> Session | None:
 
 
 def codex_sessions(root: Path, since: float) -> list[Session]:
-    base = codex_dir()
-    if not base.is_dir():
-        return []
-    out, needle = [], str(root).lower()
-    for p in base.glob("*/*/*/rollout-*.jsonl*"):
-        if p.suffix not in (".jsonl", ".zst"):
-            continue
-        try:
-            if p.stat().st_mtime < since:
+    try:
+        base = codex_dir()
+        if not base.is_dir():
+            return []
+        out, needle = [], str(root).lower()
+        for p in base.glob("*/*/*/rollout-*.jsonl*"):
+            if p.suffix not in (".jsonl", ".zst"):
                 continue
-            s = read_codex(p, root)
-        except OSError:
-            continue
-        if s and s.touches_root:
-            out.append(s)
-    return out
+            try:
+                if p.stat().st_mtime < since:
+                    continue
+                s = read_codex(p, root)
+            except OSError:
+                continue
+            if s and s.touches_root:
+                out.append(s)
+        return out
+    except OSError:
+        return []
 
 
 def all_sessions(root: Path, days: float = 14) -> list[Session]:
