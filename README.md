@@ -90,6 +90,10 @@ ghostkeep done e_77c1                # that unfinished task is finished
 ghostkeep reopen d_1a2b              # undo any of the above
 ```
 
+How well this holds up is so far measured on 7 synthetic long-run eval cases (old decision after
+10 sessions, reversal, false reversal, user corrections, interrupted work, 50 decisions) plus two real
+sessions. A long real-world run is still to come.
+
 ## Statuses
 
 | Status | Means |
