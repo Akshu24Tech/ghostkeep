@@ -22,7 +22,8 @@ from harness import world  # noqa: E402
 
 KNOWN_HEADERS = {"# Handoff", "## Unfinished", "## Recent sessions", "## Uncommitted changes",
                  "## Claimed but not on disk (pending in the IDE, or rejected)",
-                 "## Decisions and preferences in force (user's words)"}
+                 "## Decisions and preferences in force (user's words)",
+                 "## Warnings (this handoff may be incomplete)"}
 CODE_TO_VERDICT = {"claimed_not_found": "not_on_disk", "count_mismatch": "mismatch",
                    "untracked": "uncommitted", "not_committed": "uncommitted", "outside_git": "unchecked", "changed_later": "superseded"}
 

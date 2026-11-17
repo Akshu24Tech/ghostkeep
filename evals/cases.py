@@ -579,3 +579,25 @@ def fifty_decisions_fit_the_budget(w):
                               c_say("Ok.")])
     w.write("README.md", "# TeamCaptain\nA bot.\n")
     return {"capture": False, "in_force": ["Let's use tool49 for job49."], "handoff_has": ["38 more in force"]}
+
+
+# ---------------------------------------------------------------- no silent pass (doctor)
+
+@case("health")
+def unreadable_log_format_is_warned(w):
+    """A tool update changes its log format: the file names this repo, but nothing in it is understood.
+    An empty handoff would look like nobody worked here; it must say it couldn't read the log."""
+    seed(w)
+    w._jsonl(w.cli / "z9" / ".system_generated/logs/transcript.jsonl", [
+        {"kind": "turn", "role": "human", "body": f"fix the bug in {w.repo}/tc/extraction/dates.py"},
+        {"kind": "turn", "role": "agent", "body": "patched it"}])
+    return {"capture": False, "handoff_has": ["## Warnings", "could not be read", "antigravity-cli"]}
+
+
+@case("health")
+def healthy_project_has_no_warnings(w):
+    seed(w)
+    w.claude_session("ok1", [c_user("add X"), c_edit(w.abs("tc/extraction/dates.py"), "    return None\n",
+                                                     "    return None\nX = 1\n"), c_say("Added X.")])
+    w.write("tc/extraction/dates.py", BASE_DATES + "X = 1\n")
+    return {"capture": False, "handoff_lacks": ["## Warnings"]}

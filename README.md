@@ -11,7 +11,7 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.4.0 (state layer), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> Status: v0.5.0 (auto-handoff + doctor), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
@@ -38,6 +38,19 @@ ghostkeep handoff            # read session logs, check claims against git, writ
 ```
 
 Then tell the next agent: "Read .ghostkeep/HANDOFF.md first." For a browser chat, paste the file in.
+
+Or set it up once per project so you don't have to ask:
+
+```bash
+ghostkeep setup     # Claude Code: a SessionStart hook loads the handoff automatically
+                    # Codex / Antigravity: a "read the handoff first" block in AGENTS.md
+ghostkeep doctor    # is every tool's log being read? did the hook actually run?
+```
+
+The Claude Code hook is automatic: it runs on every start, resume, `/clear` and compaction, never breaks
+the session (it always exits 0) and records each run so `doctor` can prove it ran. The AGENTS.md block is
+advice an agent can skip. If a tool's log format changes and Ghostkeep can no longer read it, the handoff
+says so at the top instead of quietly showing less. `ghostkeep setup --remove` undoes it.
 
 `ghostkeep handoff` reads the logs these tools already keep on disk, so no agent has to follow a rule:
 
@@ -130,7 +143,7 @@ and decision/preference capture from the user's own words.
 
 ```bash
 python -m pytest -q          # unit tests
-python evals/run.py          # 37 labeled cases scored on 17 metrics, writes evals/RESULTS.md
+python evals/run.py          # 39 labeled cases scored on 17 metrics, writes evals/RESULTS.md
 python evals/run.py --gate   # exit 1 if any metric is below target (what CI runs)
 python evals/label_real.py   # label Ghostkeep's output on your own sessions, then --score
 ```

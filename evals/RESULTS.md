@@ -1,6 +1,6 @@
 # Ghostkeep eval results
 
-ghostkeep 0.4.0 · 37 labeled cases · python 3.11.15 · Windows
+ghostkeep 0.5.0 · 39 labeled cases · python 3.13.18 · Linux
 
 | Metric | Value | Items | Target | |
 | --- | --- | --- | --- | --- |
@@ -15,12 +15,12 @@ ghostkeep 0.4.0 · 37 labeled cases · python 3.11.15 · Windows
 | decision_precision | 1.00 | 9/9 | >= 0.9 | ok |
 | decision_recall | 1.00 | 8/8 | >= 0.9 | ok |
 | unfinished_first | 1.00 | 4/4 | >= 1.0 | ok |
-| handoff_facts | 1.00 | 8/8 | >= 1.0 | ok |
+| handoff_facts | 1.00 | 13/13 | >= 1.0 | ok |
 | state_recall | 1.00 | 10/10 | >= 1.0 | ok |
 | superseded_leak | 0 |  | <= 0 | ok |
 | secret_leaks | 0 |  | <= 0 | ok |
 | injection_fenced | 1.00 | 1/1 | >= 1.0 | ok |
-| handoff_max_60_lines | 1.00 | 37/37 | >= 1.0 | ok |
+| handoff_max_60_lines | 1.00 | 39/39 | >= 1.0 | ok |
 
 | Case | Group | Result |
 | --- | --- | --- |
@@ -61,3 +61,5 @@ ghostkeep 0.4.0 · 37 labeled cases · python 3.11.15 · Windows
 | interrupted_task_stays_until_finished | longrun | pass |
 | thread_closed_when_next_tool_finishes_it | longrun | pass |
 | fifty_decisions_fit_the_budget | longrun | pass |
+| unreadable_log_format_is_warned | health | pass |
+| healthy_project_has_no_warnings | health | pass |

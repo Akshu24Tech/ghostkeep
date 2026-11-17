@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, check, gitio, handoff, ledger, sync, state
+from . import __version__, check, gitio, handoff, ledger, sync, state, health, setup
 
 PROBLEM = {"mismatch", "orphan", "corrupt"}
 MARK = {"verified": "OK ", "uncommitted": "UNC", "mismatch": "BAD", "superseded": "OLD",
@@ -83,19 +83,68 @@ def cmd_sync(a: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_handoff(a: argparse.Namespace) -> int:
-    root = _root()
+def _handoff(root: Path, a: argparse.Namespace) -> str:
     if not ledger.ledger_path(root).exists():
         ledger.init(root)
     if not a.no_sync:
         sync.run(root, days=a.days)
     results = check.run(root)
-    text = handoff.build(root, results)
-    p = handoff.write(root, text)
+    text = handoff.build(root, results, days=a.days)
+    handoff.write(root, text)
     state.write(root, state.build(ledger.read(root), {r.entry: r.status for r in results if r.entry}))
+    return text
+
+
+def cmd_handoff(a: argparse.Namespace) -> int:
+    if a.hook:
+        return _hook(a)
+    root = _root()
+    text = _handoff(root, a)
     print(text)
-    print(f"(written to {p.relative_to(root)})", file=sys.stderr)
+    print(f"(written to {ledger.LEDGER_DIR}/HANDOFF.md)", file=sys.stderr)
     return 0
+
+
+def _hook(a: argparse.Namespace) -> int:
+    """Run by the Claude Code SessionStart hook. Never breaks the session: always exits 0, and records
+    how it went in .ghostkeep/hook.json so `ghostkeep doctor` can prove it ran."""
+    rec = {"last_run": ledger.now(), "ok": True, "error": None}
+    root = None
+    try:
+        root = gitio.repo_root(Path.cwd())
+        text = _handoff(root, a)
+        print("Ghostkeep handoff, loaded automatically at session start. Read it before scanning the repo.\n")
+        print(text)
+    except Exception as exc:  # noqa: BLE001 - the session must start whatever happens here
+        rec.update(ok=False, error=f"{type(exc).__name__}: {exc}"[:300])
+    if root is not None:
+        try:
+            (root / ledger.LEDGER_DIR).mkdir(exist_ok=True)
+            (root / ledger.LEDGER_DIR / setup.HOOK_STATE).write_text(json.dumps(rec), encoding="utf-8")
+        except OSError:
+            pass
+    return 0
+
+
+def cmd_setup(a: argparse.Namespace) -> int:
+    root = _root()
+    if a.remove:
+        lines = setup.remove(root)
+    else:
+        ledger.init(root)
+        lines = setup.install(root, claude=not a.no_claude, agents_md=not a.no_agents_md)
+    for ln in lines:
+        print(f"- {ln}")
+    if not a.remove:
+        print("Check it any time with `ghostkeep doctor`.")
+    return 0
+
+
+def cmd_doctor(a: argparse.Namespace) -> int:
+    root = _root()
+    lines = health.check(root, days=a.days)
+    print(health.render(root, lines))
+    return 1 if any(ln.level == health.WARN for ln in lines) else 0
 
 
 def _state(root: Path) -> state.State:
@@ -184,7 +233,18 @@ def main(argv: list[str] | None = None) -> int:
     ho = sub.add_parser("handoff", help="sync, check, and write .ghostkeep/HANDOFF.md for the next agent")
     ho.add_argument("--days", type=float, default=14)
     ho.add_argument("--no-sync", action="store_true")
+    ho.add_argument("--hook", action="store_true", help=argparse.SUPPRESS)  # used by the session-start hook
     ho.set_defaults(fn=cmd_handoff)
+
+    su = sub.add_parser("setup", help="load the handoff automatically: Claude Code hook + AGENTS.md block")
+    su.add_argument("--remove", action="store_true", help="undo setup")
+    su.add_argument("--no-claude", action="store_true", help="skip the Claude Code hook")
+    su.add_argument("--no-agents-md", action="store_true", help="don't touch AGENTS.md")
+    su.set_defaults(fn=cmd_setup)
+
+    dr = sub.add_parser("doctor", help="check that every tool's logs are being read and the hook runs")
+    dr.add_argument("--days", type=float, default=14)
+    dr.set_defaults(fn=cmd_doctor)
 
     sub.add_parser("state", help="decisions in force and open threads; writes .ghostkeep/STATE.md") \
         .set_defaults(fn=cmd_state)
