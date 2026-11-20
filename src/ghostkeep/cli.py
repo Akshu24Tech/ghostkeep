@@ -105,22 +105,34 @@ def cmd_handoff(a: argparse.Namespace) -> int:
     return 0
 
 
+def _stdin_json() -> dict:
+    """The JSON a tool passes its hook on stdin (ignored when run by hand)."""
+    if sys.stdin is None or sys.stdin.isatty():
+        return {}
+    try:
+        data = json.loads(sys.stdin.read(1_000_000) or "{}")
+    except (ValueError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _hook(a: argparse.Namespace) -> int:
-    """Run by the Claude Code SessionStart hook. Never breaks the session: always exits 0, and records
-    how it went in .ghostkeep/hook.json so `ghostkeep doctor` can prove it ran."""
+    """Run by a tool's session-start hook. Never breaks the session: always exits 0, prints only what that
+    tool expects on stdout, and records how it went in .ghostkeep/hook.json so `doctor` can prove it ran."""
+    tool = a.format or "claude-code"
     rec = {"last_run": ledger.now(), "ok": True, "error": None}
     root = None
+    out = setup.empty_output(tool)
     try:
-        root = gitio.repo_root(Path.cwd())
-        text = _handoff(root, a)
-        print("Ghostkeep handoff, loaded automatically at session start. Read it before scanning the repo.\n")
-        print(text)
+        where = setup.root_from_stdin(_stdin_json())
+        root = gitio.repo_root(Path(where) if where else Path.cwd())
+        out = setup.render_hook(tool, _handoff(root, a))
     except Exception as exc:  # noqa: BLE001 - the session must start whatever happens here
         rec.update(ok=False, error=f"{type(exc).__name__}: {exc}"[:300])
+    print(out)
     if root is not None:
         try:
-            (root / ledger.LEDGER_DIR).mkdir(exist_ok=True)
-            (root / ledger.LEDGER_DIR / setup.HOOK_STATE).write_text(json.dumps(rec), encoding="utf-8")
+            setup.record_run(root, tool, rec)
         except OSError:
             pass
     return 0
@@ -132,7 +144,12 @@ def cmd_setup(a: argparse.Namespace) -> int:
         lines = setup.remove(root)
     else:
         ledger.init(root)
-        lines = setup.install(root, claude=not a.no_claude, agents_md=not a.no_agents_md)
+        tools = None if a.tools is None else [t.strip() for t in a.tools.split(",") if t.strip()]
+        bad = [t for t in tools or [] if t not in setup.TOOLS]
+        if bad:
+            print(f"unknown tool(s): {', '.join(bad)}. Choose from {', '.join(setup.TOOLS)}", file=sys.stderr)
+            return 2
+        lines = setup.install(root, tools=tools, agents_md=not a.no_agents_md)
     for ln in lines:
         print(f"- {ln}")
     if not a.remove:
@@ -233,12 +250,13 @@ def main(argv: list[str] | None = None) -> int:
     ho = sub.add_parser("handoff", help="sync, check, and write .ghostkeep/HANDOFF.md for the next agent")
     ho.add_argument("--days", type=float, default=14)
     ho.add_argument("--no-sync", action="store_true")
-    ho.add_argument("--hook", action="store_true", help=argparse.SUPPRESS)  # used by the session-start hook
+    ho.add_argument("--hook", action="store_true", help=argparse.SUPPRESS)  # used by session-start hooks
+    ho.add_argument("--format", choices=["antigravity", "gemini-cli", "claude-code"], help=argparse.SUPPRESS)
     ho.set_defaults(fn=cmd_handoff)
 
-    su = sub.add_parser("setup", help="load the handoff automatically: Claude Code hook + AGENTS.md block")
+    su = sub.add_parser("setup", help="load the handoff automatically at session start in every tool")
     su.add_argument("--remove", action="store_true", help="undo setup")
-    su.add_argument("--no-claude", action="store_true", help="skip the Claude Code hook")
+    su.add_argument("--tools", help="comma list: antigravity,gemini-cli,claude-code (default: the ones installed)")
     su.add_argument("--no-agents-md", action="store_true", help="don't touch AGENTS.md")
     su.set_defaults(fn=cmd_setup)
 

@@ -132,16 +132,23 @@ def check(root: Path, days: float = 14) -> list[Line]:
     else:
         out.append(Line(INFO, "ledger", "none yet: `ghostkeep handoff` creates it"))
 
-    hook = setup.status(root)
-    if not hook["installed"]:
-        out.append(Line(WARN, "auto-handoff", "not set up, so the next agent only sees HANDOFF.md if you tell it "
-                                              "to: run `ghostkeep setup`"))
-    elif hook.get("last_run") is None:
-        out.append(Line(WARN, "auto-handoff", "installed but has never run: start a new Claude Code session here"))
-    elif not hook.get("ok", True):
-        out.append(Line(WARN, "auto-handoff", f"last run {hook['last_run'][:16]} failed: {hook.get('error')}"))
-    else:
-        out.append(Line(OK, "auto-handoff", f"Claude Code hook installed; last ran {hook['last_run'][:16].replace('T', ' ')}"))
+    st = setup.status(root)
+    hooked = [t for t in setup.TOOLS if st[t]["installed"]]
+    if not hooked:
+        out.append(Line(WARN, "auto-handoff", "no session-start hook, so the next agent only sees HANDOFF.md if you "
+                                              "tell it to: run `ghostkeep setup`"))
+    for tool in hooked:
+        h, name = st[tool], setup.TOOLS[tool][1]
+        if h.get("last_run") is None:
+            out.append(Line(WARN, "auto-handoff", f"{name} hook installed but has never run: "
+                                                  f"start a new {name} session here"))
+        elif not h.get("ok", True):
+            out.append(Line(WARN, "auto-handoff", f"{name} hook failed on {h['last_run'][:16]}: {h.get('error')}"))
+        else:
+            out.append(Line(OK, "auto-handoff", f"{name} hook ran {h['last_run'][:16].replace('T', ' ')}"))
+    out.append(Line(OK if st["agents-md"]["installed"] else INFO, "AGENTS.md",
+                    "has the read-the-handoff block (advice for Codex and others)" if st["agents-md"]["installed"]
+                    else "no ghostkeep block (Codex reads AGENTS.md: `ghostkeep setup` adds one)"))
     return out
 
 

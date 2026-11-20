@@ -11,7 +11,7 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.5.0 (auto-handoff + doctor), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> Status: v0.5.1 (auto-handoff for Antigravity, Gemini CLI and Claude Code + doctor), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
@@ -42,15 +42,23 @@ Then tell the next agent: "Read .ghostkeep/HANDOFF.md first." For a browser chat
 Or set it up once per project so you don't have to ask:
 
 ```bash
-ghostkeep setup     # Claude Code: a SessionStart hook loads the handoff automatically
-                    # Codex / Antigravity: a "read the handoff first" block in AGENTS.md
-ghostkeep doctor    # is every tool's log being read? did the hook actually run?
+ghostkeep setup     # session-start hooks for the tools installed on this machine, plus an AGENTS.md block
+ghostkeep doctor    # is every tool's log being read? did each hook actually run?
 ```
 
-The Claude Code hook is automatic: it runs on every start, resume, `/clear` and compaction, never breaks
-the session (it always exits 0) and records each run so `doctor` can prove it ran. The AGENTS.md block is
-advice an agent can skip. If a tool's log format changes and Ghostkeep can no longer read it, the handoff
-says so at the top instead of quietly showing less. `ghostkeep setup --remove` undoes it.
+| Tool | How the handoff reaches it | Config written |
+| --- | --- | --- |
+| Antigravity (IDE, CLI, App) | `SessionStart` hook, injected as a system message | `.agents/hooks.json` |
+| Gemini CLI | `SessionStart` hook, `additionalContext` | `.gemini/settings.json` |
+| Claude Code (paid plans) | `SessionStart` hook | `.claude/settings.local.json` |
+| Codex | Codex reads `AGENTS.md`; a "read the handoff first" block (advice, not enforced) | `AGENTS.md` |
+
+Each hook never breaks a session (it always exits 0 and prints only what that tool expects) and records
+every run, so `doctor` shows whether it really fired. That matters: hook support is new in some of these
+tools and has been reported flaky on some setups, so "installed" is not taken as "working". Gemini CLI
+asks you to approve a new project hook once. If a tool's log format changes and Ghostkeep can no longer
+read it, the handoff says so at the top instead of quietly showing less. `ghostkeep setup --remove`
+undoes everything; `--tools antigravity,gemini-cli` picks tools by hand.
 
 `ghostkeep handoff` reads the logs these tools already keep on disk, so no agent has to follow a rule:
 
