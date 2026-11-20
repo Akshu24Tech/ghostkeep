@@ -60,7 +60,8 @@ def detect() -> list[str]:
     found = []
     if any((home / ".gemini" / d).is_dir() for d in ("antigravity", "antigravity-cli", "antigravity-ide")):
         found.append("antigravity")
-    if (home / ".gemini" / "settings.json").exists() or (home / ".gemini" / "tmp").is_dir():
+    # Not ~/.gemini/settings.json: Antigravity shares ~/.gemini, so that file proves nothing about Gemini CLI.
+    if shutil.which("gemini") or (home / ".gemini" / "tmp").is_dir():
         found.append("gemini-cli")
     if (home / ".claude").is_dir():
         found.append("claude-code")

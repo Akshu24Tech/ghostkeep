@@ -131,6 +131,8 @@ def test_v050_flat_hook_record_still_reads_as_claude(tmp_path):
 def test_detect_uses_home_folders(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".gemini/antigravity-cli").mkdir(parents=True)
+    (home / ".gemini/settings.json").write_text("{}")  # Antigravity writes this too: not a Gemini CLI sign
+    monkeypatch.setattr(setup.shutil, "which", lambda name: None)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     assert setup.detect() == ["antigravity"]
