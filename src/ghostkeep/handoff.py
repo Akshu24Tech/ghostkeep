@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from . import check, gitio, health, ledger, state
+from . import check, gitio, health, ledger, state, verify
 
 MAX_LINES = 60
 MAX_DECISIONS = 12
@@ -25,6 +25,19 @@ def quote(text: str, n: int = 160) -> str:
     t = re.sub(r"(^|\s)#{1,6}(?=\s)", r"\1", t)
     t = t if len(t) <= n else t[: n - 1] + "\u2026"
     return f'"{t}"'
+
+
+def _tests_line(c: ledger.Claim, test_runs: list[dict], root: Path) -> str:
+    """What the pinned test command said about this session's "tests pass"."""
+    mine = [r for r in test_runs if r.get("claim") == c.id]
+    if not mine:
+        if not verify.load_config(root).get("test_command"):
+            return "tests: the agent says they pass, NOT CHECKED (pin a test command: `ghostkeep pin-test \"...\"`)"
+        return "tests: the agent says they pass, not checked yet (run `ghostkeep handoff`)"
+    r = mine[-1]
+    if r.get("ok"):
+        return f"tests: the agent says they pass; your pinned test command on the current files: {r.get('why')}"
+    return f"tests: the agent says they pass, BUT your pinned test command on the current files: {r.get('why')}"
 
 
 def build(root: Path, results: list[check.Result] | None = None, n_sessions: int = 3, days: float = 14) -> str:
@@ -81,6 +94,8 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
             L.append(f"- ({len(st.replaced())} earlier decision(s) replaced or retired: not listed, see STATE.md)")
         L.append("")
 
+    test_runs = verify.runs(records)
+
     # 2. Recent sessions, newest first, with their checked status.
     recent = list(latest_by_session.values())[-n_sessions:][::-1]
     if recent:
@@ -99,6 +114,8 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
                         L.append(f"  - `{f.path}`: deleted by this session, re-created later by another session or by hand")
                     elif f.code == "outside_git":
                         L.append(f"  - `{f.path}`: exists, but git doesn't track it, so the edit can't be checked")
+            if c.tests_claimed:
+                L.append("  - " + _tests_line(c, test_runs, root))
         L.append("")
 
     # 2b. Claimed edits that never reached disk: still pending in the IDE, or rejected.

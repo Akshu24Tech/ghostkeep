@@ -127,8 +127,14 @@ def check(root: Path, days: float = 14) -> list[Line]:
     lp = ledger.ledger_path(root)
     if lp.exists():
         bad, total = _bad_json(lp)
-        out.append(Line(WARN if bad else OK, "ledger",
-                        f"{total} records" + (f", {bad} unreadable line(s): run `ghostkeep check`" if bad else "")))
+        breaks = ledger.chain_breaks(root)
+        msg = f"{total} records"
+        if bad:
+            msg += f", {bad} unreadable line(s): run `ghostkeep check`"
+        if breaks:
+            msg += (f", hash chain broken at line(s) {', '.join(map(str, breaks[:5]))}: an earlier line was "
+                    "edited, removed or inserted. If you did that on purpose: `ghostkeep ack-ledger --reason \"...\"`")
+        out.append(Line(WARN if bad or breaks else OK, "ledger", msg))
     else:
         out.append(Line(INFO, "ledger", "none yet: `ghostkeep handoff` creates it"))
 

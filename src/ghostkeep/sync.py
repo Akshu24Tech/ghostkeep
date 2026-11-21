@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import decisions, gitio, ledger, sources
+from . import decisions, gitio, ledger, sources, verify
 from .ledger import Claim, FileClaim, new_id, now
 
 
@@ -33,7 +33,7 @@ def session_to_claim(root: Path, s: sources.Session) -> Claim | None:
         files=files, open=open_items, model=s.model, session=s.session, source=s.source,
         base=s.base or gitio.commit_before(root, s.started), ts=sources.to_local(s.ended) or now(),
         prompts=[sources.clip(p, 300) for _, p in s.prompts[:8]], interrupted=s.interrupted,
-        source_rev=s.rev, via="sync",
+        source_rev=s.rev, via="sync", tests_claimed=verify.claims_tests(s.final),
     )
 
 

@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent / "src")]
 
-from ghostkeep import __version__, check, handoff, ledger, state, sync  # noqa: E402
+from ghostkeep import __version__, check, handoff, ledger, state, sync, verify  # noqa: E402
 from cases import CASES  # noqa: E402
 from harness import world  # noqa: E402
 
@@ -75,7 +75,17 @@ def run_case(fn):
                 st = state.build(ledger.read(w.repo))
                 find = lambda t: next(i.id for i in st.decisions + st.threads if t in i.text)  # noqa: E731
                 state.record(w.repo, op, find(target), by=find(new) if new else None)
+            if label.get("run_tests"):
+                verify.run(w.repo)  # what `ghostkeep handoff` does before building the file
+            if label.get("tamper"):  # someone edits an old ledger line by hand
+                lp = ledger.ledger_path(w.repo)
+                lines = lp.read_text(encoding="utf-8").splitlines()
+                lines[0] = lines[0].replace('"v": 1', '"v": 1, "edited": true', 1)
+                lp.write_text("\n".join(lines) + "\n", encoding="utf-8")
             text = handoff.build(w.repo, results)
+            gone = [p for p in label.get("absent_files", []) if (w.repo / p).exists()]
+            if gone:
+                raise AssertionError(f"files that must not exist were created: {gone}")
             raw_ledger = ledger.ledger_path(w.repo).read_text(encoding="utf-8")
             records = ledger.read(w.repo)
         except Exception:  # a crash is a scored failure, not an aborted run

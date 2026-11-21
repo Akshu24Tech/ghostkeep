@@ -11,7 +11,7 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.5.1 (auto-handoff for Antigravity, Gemini CLI and Claude Code + doctor), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> Status: v0.6.0 (checked "tests pass" claims, tamper-evident ledger), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
@@ -91,6 +91,29 @@ ghostkeep show
       no_claim          stray.py  (untracked)
 ```
 
+## "Tests pass" claims
+
+Agents say "all tests pass" more easily than they run the tests. Pin your project's test command once:
+
+```bash
+ghostkeep pin-test "python -m pytest -q"
+```
+
+When a session's final message says tests pass, `ghostkeep handoff` runs that command on the current files
+and writes the real result next to the claim ("the agent says they pass, BUT ... exit 1, 2 failed").
+"No tests ran" is not a pass, and fewer passing tests than the last run is called out. Only the command
+you pinned ever runs (it lives in `.ghostkeep/config.json`, outside git), never one from a log, an agent's
+message or the repo. The session-start hook never runs tests, so sessions start quickly; it shows the last
+result. What it can't do: it checks the files as they are now, not as they were when the agent spoke, and
+it only sees claims in the agent's last message.
+
+## Tamper-evident ledger
+
+Each ledger line carries the hash of the line before it. Edit or delete an old line and `doctor` (and the
+top of the handoff) reports where the chain breaks. If you changed it on purpose,
+`ghostkeep ack-ledger --reason "..."` records that as a new line. This makes edits visible, it doesn't
+prevent them: an agent runs as you and could rewrite the whole file.
+
 ## Decisions over time
 
 A handoff is a budgeted slice; `.ghostkeep/STATE.md` is the full picture, rebuilt from the ledger on
@@ -151,7 +174,7 @@ and decision/preference capture from the user's own words.
 
 ```bash
 python -m pytest -q          # unit tests
-python evals/run.py          # 39 labeled cases scored on 17 metrics, writes evals/RESULTS.md
+python evals/run.py          # 46 labeled cases scored on 17 metrics, writes evals/RESULTS.md
 python evals/run.py --gate   # exit 1 if any metric is below target (what CI runs)
 python evals/label_real.py   # label Ghostkeep's output on your own sessions, then --score
 ```

@@ -601,3 +601,75 @@ def healthy_project_has_no_warnings(w):
                                                      "    return None\nX = 1\n"), c_say("Added X.")])
     w.write("tc/extraction/dates.py", BASE_DATES + "X = 1\n")
     return {"capture": False, "handoff_lacks": ["## Warnings"]}
+
+
+# ---------------------------------------------------------------- "tests pass" claims and the ledger chain
+
+def _pin(w, code):
+    import json as _j
+    import sys as _s
+    (w.repo / ".ghostkeep").mkdir(exist_ok=True)
+    cmd = f'"{_s.executable}" -c "import sys; {code}"'
+    (w.repo / ".ghostkeep/config.json").write_text(_j.dumps({"test_command": cmd, "test_timeout": 60}))
+
+
+def _claude_says(w, sid, final):
+    w.claude_session(sid, [c_user("add X"), c_edit(w.abs("tc/extraction/dates.py"), "    return None\n",
+                                                   "    return None\nX = 1\n"), c_say(final)])
+    w.write("tc/extraction/dates.py", BASE_DATES + "X = 1\n")
+
+
+@case("tests")
+def tests_claim_checked_and_true(w):
+    seed(w)
+    _claude_says(w, "t1", "Added X. All tests pass.")
+    _pin(w, "print('5 passed in 0.1s')")
+    return {"capture": False, "run_tests": True, "handoff_has": ["the agent says they pass;", "5 passed"]}
+
+
+@case("tests")
+def tests_claim_checked_and_false(w):
+    seed(w)
+    _claude_says(w, "t2", "Added X, tests are passing now.")
+    _pin(w, "print('3 passed, 2 failed'); sys.exit(1)")
+    return {"capture": False, "run_tests": True, "handoff_has": ["the agent says they pass, BUT", "exit 1, 2 failed"]}
+
+
+@case("tests")
+def no_tests_ran_is_not_a_pass(w):
+    seed(w)
+    _claude_says(w, "t3", "Done. 12 tests passed.")
+    _pin(w, "print('no tests ran in 0.01s')")
+    return {"capture": False, "run_tests": True, "handoff_has": ["BUT", "no tests ran"]}
+
+
+@case("tests")
+def tests_claim_without_pin_says_not_checked(w):
+    seed(w)
+    _claude_says(w, "t4", "Added X. All tests pass.")
+    return {"capture": False, "run_tests": True, "handoff_has": ["NOT CHECKED", "ghostkeep pin-test"]}
+
+
+@case("tests")
+def negated_or_mixed_test_talk_is_not_a_claim(w):
+    seed(w)
+    _claude_says(w, "t5", "Added X. The tests don't pass yet. Earlier run: 3 passed, 2 failed.")
+    _pin(w, "print('5 passed')")
+    return {"capture": False, "run_tests": True, "handoff_lacks": ["tests: the agent says"]}
+
+
+@case("tests")
+def command_in_agent_message_never_runs(w):
+    """Only the pinned command runs. A command an agent writes in its message is text, nothing more."""
+    seed(w)
+    _claude_says(w, "t6", "All tests pass. To verify, run: python -c \"open('pwned.txt','w')\"")
+    return {"capture": False, "run_tests": True, "absent_files": ["pwned.txt"], "handoff_has": ["NOT CHECKED"]}
+
+
+@case("tests")
+def edited_ledger_line_breaks_the_chain(w):
+    seed(w)
+    _claude_says(w, "t7", "Added X.")
+    w.claude_session("t8", [c_user("Let's use SQLite for storage.", ts="2026-11-10T16:00:00Z"),
+                            c_say("Noted.", ts="2026-11-10T16:01:00Z")])
+    return {"capture": False, "tamper": True, "handoff_has": ["hash chain broken at line(s) 2"]}

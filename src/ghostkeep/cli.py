@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__, check, gitio, handoff, ledger, sync, state, health, setup
+from . import __version__, check, gitio, handoff, ledger, sync, state, health, setup, verify
 
 PROBLEM = {"mismatch", "orphan", "corrupt"}
 MARK = {"verified": "OK ", "uncommitted": "UNC", "mismatch": "BAD", "superseded": "OLD",
@@ -89,6 +89,8 @@ def _handoff(root: Path, a: argparse.Namespace) -> str:
     if not a.no_sync:
         sync.run(root, days=a.days)
     results = check.run(root)
+    if not a.hook:  # the session-start hook must stay quick: it shows the last test result instead
+        verify.run(root)
     text = handoff.build(root, results, days=a.days)
     handoff.write(root, text)
     state.write(root, state.build(ledger.read(root), {r.entry: r.status for r in results if r.entry}))
@@ -154,6 +156,35 @@ def cmd_setup(a: argparse.Namespace) -> int:
         print(f"- {ln}")
     if not a.remove:
         print("Check it any time with `ghostkeep doctor`.")
+    return 0
+
+
+def cmd_pin_test(a: argparse.Namespace) -> int:
+    root = _root()
+    ledger.init(root)
+    if a.clear:
+        verify.pin(root, None)
+        print("unpinned: 'tests pass' claims will show as not checked")
+        return 0
+    if not a.command:
+        cmd = verify.load_config(root).get("test_command")
+        print(f"pinned: {cmd}" if cmd else "nothing pinned. Example: ghostkeep pin-test \"python -m pytest -q\"")
+        return 0
+    verify.pin(root, a.command, a.timeout)
+    print(f"pinned: {a.command} (timeout {a.timeout}s)")
+    print("It runs only from `ghostkeep handoff`, only when an agent says tests pass, and only this command.")
+    return 0
+
+
+def cmd_ack_ledger(a: argparse.Namespace) -> int:
+    root = _root()
+    breaks = ledger.chain_breaks(root)
+    if not breaks:
+        print("the ledger's hash chain is intact: nothing to acknowledge")
+        return 0
+    ledger.append(root, {"v": ledger.SCHEMA_VERSION, "kind": "ack", "id": ledger.new_id("a"), "ts": ledger.now(),
+                         "lines": breaks, "reason": a.reason})
+    print(f"acknowledged break(s) at line(s) {', '.join(map(str, breaks))}: {a.reason}")
     return 0
 
 
@@ -259,6 +290,16 @@ def main(argv: list[str] | None = None) -> int:
     su.add_argument("--tools", help="comma list: antigravity,gemini-cli,claude-code (default: the ones installed)")
     su.add_argument("--no-agents-md", action="store_true", help="don't touch AGENTS.md")
     su.set_defaults(fn=cmd_setup)
+
+    pt = sub.add_parser("pin-test", help="pin the test command used to check 'tests pass' claims")
+    pt.add_argument("command", nargs="?", help='e.g. "python -m pytest -q" (quote it)')
+    pt.add_argument("--timeout", type=int, default=verify.DEFAULT_TIMEOUT, help="seconds (default 300)")
+    pt.add_argument("--clear", action="store_true", help="unpin")
+    pt.set_defaults(fn=cmd_pin_test)
+
+    ak = sub.add_parser("ack-ledger", help="accept a break in the ledger's hash chain you made on purpose")
+    ak.add_argument("--reason", required=True)
+    ak.set_defaults(fn=cmd_ack_ledger)
 
     dr = sub.add_parser("doctor", help="check that every tool's logs are being read and the hook runs")
     dr.add_argument("--days", type=float, default=14)

@@ -1,6 +1,7 @@
 """The append-only ledger: .ghostkeep/ledger.jsonl."""
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 from dataclasses import dataclass, field
@@ -80,6 +81,7 @@ class Claim:
     interrupted: bool = False
     source_rev: str | None = None
     via: str = "manual"  # "manual" (ghostkeep log) or "sync" (read from a session log)
+    tests_claimed: bool = False  # the agent's final message says tests pass
 
     def to_json(self) -> dict:
         return {
@@ -88,7 +90,7 @@ class Claim:
             "source": self.source, "source_rev": self.source_rev, "via": self.via,
             "asked": self.asked, "prompts": self.prompts, "claimed": self.claimed,
             "files": [f.__dict__ for f in self.files], "open": self.open,
-            "interrupted": self.interrupted, "base": self.base,
+            "interrupted": self.interrupted, "base": self.base, "tests_claimed": self.tests_claimed,
         }
 
     @classmethod
@@ -100,6 +102,7 @@ class Claim:
             source=d.get("source"), base=d.get("base"), id=d["id"], ts=d["ts"],
             prompts=d.get("prompts", []), interrupted=d.get("interrupted", False),
             source_rev=d.get("source_rev"), via=d.get("via", "manual"),
+            tests_claimed=d.get("tests_claimed", False),
         )
 
 
@@ -119,8 +122,49 @@ def append(root: Path, record: dict) -> None:
     p = ledger_path(root)
     if not p.exists():
         raise FileNotFoundError(f"No ledger at {p}. Run `ghostkeep init` first.")
+    lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # Hash chain: each line carries the hash of the line before it, so an edited or deleted line shows up.
+    record = {**record, "prev": line_hash(lines[-1]) if lines else GENESIS}
     with p.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+GENESIS = "0" * 32
+
+
+def line_hash(line: str) -> str:
+    return hashlib.sha256(line.encode("utf-8")).hexdigest()[:32]
+
+
+def chain_breaks(root: Path) -> list[int]:
+    """1-based line numbers where the chain doesn't hold: the line before was edited, removed or inserted.
+    Lines written before v0.6 carry no hash and are skipped. Breaks you accepted with `ghostkeep ack-ledger`
+    are not reported again. This shows tampering; it can't stop it (the agent runs as you)."""
+    p = ledger_path(root)
+    if not p.exists():
+        return []
+    lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    breaks, acked, chained = [], set(), False
+    for i, ln in enumerate(lines):
+        try:
+            rec = json.loads(ln)
+        except json.JSONDecodeError:
+            if chained:
+                breaks.append(i + 1)
+            continue
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("kind") == "ack":
+            acked |= set(rec.get("lines", []))
+        if "prev" not in rec:
+            if chained:
+                breaks.append(i + 1)  # an unchained line inside the chain was inserted by hand
+            continue
+        expected = line_hash(lines[i - 1]) if i else GENESIS
+        if rec["prev"] != expected:
+            breaks.append(i + 1)
+        chained = True
+    return [b for b in breaks if b not in acked]
 
 
 def read(root: Path) -> list[dict]:
