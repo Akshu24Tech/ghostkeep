@@ -24,6 +24,8 @@ def test_parse_and_verdict():
     ok, why = verify.verdict({"exit": 0, "counts": {"passed": 30}}, {"counts": {"passed": 34}})
     assert not ok and "fewer than last run (34)" in why
     assert verify.verdict({"exit": None, "summary": "timed out after 5s", "counts": {}}, None) == (False, "timed out after 5s")
+    ok, why = verify.verdict({"exit": 1, "counts": {}, "summary": "No module named pytest"}, None)
+    assert not ok and why == "exit 1, the command itself failed: No module named pytest"
 
 
 def _repo(tmp_path):

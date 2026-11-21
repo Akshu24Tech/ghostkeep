@@ -105,7 +105,10 @@ def verdict(run: dict, previous: dict | None) -> tuple[bool, str]:
         return False, run.get("summary") or "timed out"
     if code != 0:
         bad = ", ".join(f"{c[k]} {k}" for k in ("failed", "error") if c.get(k))
-        return False, f"exit {code}" + (f", {bad}" if bad else "")
+        if bad:
+            return False, f"exit {code}, {bad}"
+        # No test counts: the command itself probably didn't run (wrong Python, missing package). Say why.
+        return False, f"exit {code}, the command itself failed: {run.get('summary') or 'no output'}"
     ran = c.get("passed", 0) + c.get("ran", 0)
     if ran == 0:
         return False, "exit 0 but no tests ran"

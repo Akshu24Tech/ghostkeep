@@ -33,6 +33,8 @@ def _tests_line(c: ledger.Claim, test_runs: list[dict], root: Path) -> str:
     if not mine:
         if not verify.load_config(root).get("test_command"):
             return "tests: the agent says they pass, NOT CHECKED (pin a test command: `ghostkeep pin-test \"...\"`)"
+        if any(r.get("ts", "") > c.ts for r in test_runs):
+            return "tests: the agent says they pass, not checked (a later session's claim was checked instead)"
         return "tests: the agent says they pass, not checked yet (run `ghostkeep handoff`)"
     r = mine[-1]
     if r.get("ok"):
