@@ -131,8 +131,10 @@ def run(root: Path) -> dict | None:
     if claim is None:
         return None
     state = f"{gitio.head(root)}|{sorted(gitio.changed_paths(root).items())}"
-    if any(r.get("claim") == claim.id and r.get("state") == state for r in runs(records)):
-        return None  # already checked this claim on exactly these files
+    cmd = load_config(root).get("test_command")
+    if any(r.get("claim") == claim.id and r.get("state") == state and r.get("command") == cmd
+           for r in runs(records)):
+        return None  # already checked this claim, on exactly these files, with this same command
     res = run_pinned(root)
     if res is None:
         return None

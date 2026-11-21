@@ -54,6 +54,8 @@ def test_run_only_once_per_claim_and_state(tmp_path):
     assert first["ok"] and first["why"] == "2 passed"
     assert verify.run(root) is None  # same claim, same files: not run again
     assert marker.read_text() == "x"
+    verify.pin(root, f'"{sys.executable}" -c "print(\'3 passed\')"')  # re-pinning: check again
+    assert verify.run(root)["why"] == "3 passed"
 
 
 def test_chain_detects_edits_and_ack_clears_them(tmp_path, monkeypatch, capsys):
