@@ -80,3 +80,16 @@ def test_old_unchained_ledger_is_not_a_break(tmp_path):
     p.write_text(json.dumps({"v": 1, "kind": "decision", "id": "d_old", "ts": "t", "text": "pre v0.6"}) + "\n")
     ledger.append(root, {"v": 1, "kind": "decision", "id": "d_new", "ts": "t", "text": "v0.6"})
     assert ledger.chain_breaks(root) == []
+
+
+def test_same_session_owns_a_file_once(tmp_path):
+    from ghostkeep import check, handoff
+    root = _repo(tmp_path)
+    (root / "demo.md").write_text("x\n")
+    for rev in ("1:1", "2:2"):  # the same session read twice because its log grew
+        ledger.append(root, {"v": 1, "kind": "claim", "id": f"e_{rev[0]}", "ts": "2026-11-16T21:43:00",
+                             "tool": "claude-code", "session": "s1", "source_rev": rev, "asked": "a", "claimed": "c",
+                             "files": [{"path": "demo.md", "added": None, "removed": None}]})
+    text = handoff.build(root, check.run(root, write=False))
+    line = next(ln for ln in text.splitlines() if "`demo.md`" in ln)
+    assert line.count("claude-code") == 1, line

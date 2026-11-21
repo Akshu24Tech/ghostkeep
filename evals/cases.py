@@ -673,3 +673,25 @@ def edited_ledger_line_breaks_the_chain(w):
     w.claude_session("t8", [c_user("Let's use SQLite for storage.", ts="2026-11-10T16:00:00Z"),
                             c_say("Noted.", ts="2026-11-10T16:01:00Z")])
     return {"capture": False, "tamper": True, "handoff_has": ["hash chain broken at line(s) 2"]}
+
+
+def _c_bash_only(w, sid, final):
+    import json as _j  # noqa: F401
+    rows = [c_user("Add a docstring to parse_user_intent, then run the tests and tell me if they pass."),
+            {"type": "assistant", "timestamp": "2026-11-10T15:51:00Z", "message": {"model": "claude-opus-5",
+             "role": "assistant", "content": [{"type": "tool_use", "name": "Bash",
+                                               "input": {"command": "grep -n 'def parse' backend/test_nlu.py"}}]}},
+            c_say(final)]
+    w.claude_session(sid, rows)
+
+
+@case("tests")
+def test_claim_in_a_session_with_no_edits_is_still_checked(w):
+    """Real session (21 Nov): Claude found the docstring already there, edited nothing, ran the suite and
+    said "Tests pass ... 11 passed". With no edits the session was dropped, so the claim went unchecked."""
+    seed(w)
+    _c_bash_only(w, "r1", "The docstring was already there, so I left the file untouched.\n\n## Tests pass\n\n"
+                          "11 passed in 17.79s")
+    _pin(w, "print('11 passed in 9.1s')")
+    return {"capture": False, "run_tests": True,
+            "handoff_has": ["no file changes", "the agent says they pass;", "11 passed"]}

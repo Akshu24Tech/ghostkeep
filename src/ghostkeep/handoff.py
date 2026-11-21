@@ -142,7 +142,13 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
         for p in sorted(dirty)[:12]:
             kind = "new file" if dirty[p] == "??" else "deleted" if "D" in dirty[p] else "modified"
             who = []
-            for c in owners.get(p, [])[:3]:
+            seen_sessions = set()
+            for c in owners.get(p, []):
+                if (c.session or c.id) in seen_sessions:
+                    continue  # the same session re-read after its log grew: one owner, not two
+                seen_sessions.add(c.session or c.id)
+                if len(seen_sessions) > 3:
+                    break
                 r = status.get(c.id)
                 odd = r is not None and any(f.path == p and f.code == "count_mismatch" for f in r.findings)
                 who.append(f"{c.tool} {_short(c.ts)[11:]}" + (" (counts don't match)" if odd else ""))

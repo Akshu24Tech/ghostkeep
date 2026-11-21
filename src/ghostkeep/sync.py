@@ -19,8 +19,8 @@ class SyncReport:
 
 def session_to_claim(root: Path, s: sources.Session) -> Claim | None:
     files = [FileClaim(p, a, r) for p, a, r in s.files()]
-    if not files and not (s.interrupted and s.prompts):
-        return None  # a finished Q&A session; an interrupted one is unfinished work, so keep it
+    if not files and not (s.interrupted and s.prompts) and not verify.claims_tests(s.final):
+        return None  # a finished Q&A session; keep interrupted ones (unfinished) and 'tests pass' claims
     first = s.prompts[0][1] if s.prompts else "(no prompt found in the session log)"
     last = s.prompts[-1][1] if s.prompts else None
     open_items = []
