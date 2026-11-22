@@ -12,7 +12,10 @@ a wrong "replaced" would hide a rule that still holds, which is worse than showi
 """
 from __future__ import annotations
 
+import os
 import re
+import time
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,7 +23,8 @@ from . import ledger
 from .ledger import LEDGER_DIR, new_id, now
 
 STATE_FILE = "STATE.md"
-OPS = ("retire", "supersede", "done", "reopen")
+OPS = ("retire", "supersede", "done", "reopen", "confirm")
+REVIEW_DAYS = 30  # a decision nobody has repeated or confirmed for this long is "due for review"
 
 _TERM = r"([A-Za-z][\w.+#/-]*)"
 REVERSALS = [re.compile(p, re.I) for p in (
@@ -65,12 +69,15 @@ class Item:
     by: str | None = None   # id that superseded it, or "you"
     why: str | None = None
     files: list[str] = field(default_factory=list)
+    age_days: int | None = None  # days since it was last said or confirmed (decisions only)
+    due: bool = False            # older than REVIEW_DAYS: still true? confirm or retire
 
 
 @dataclass
 class State:
     decisions: list[Item]   # oldest first, every status
     threads: list[Item]
+    stats: dict = field(default_factory=dict)
 
     def active(self) -> list[Item]:
         return [d for d in self.decisions if d.status == "active"]
@@ -95,7 +102,24 @@ def record(root: Path, op: str, target: str, by: str | None = None, note: str | 
     return r
 
 
-def build(records: list[dict], statuses: dict[str, str] | None = None) -> State:
+def _epoch(ts: str | None) -> float | None:
+    """Ledger timestamps come with an offset, 'Z', or none (read as UTC)."""
+    if not ts:
+        return None
+    try:
+        d = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).timestamp()
+
+
+def _now() -> float:
+    """GHOSTKEEP_NOW pins the clock (evals), so 'how old is this decision' doesn't drift with the calendar."""
+    pinned = _epoch(os.environ.get("GHOSTKEEP_NOW"))
+    return pinned if pinned is not None else time.time()
+
+
+def build(records: list[dict], statuses: dict[str, str] | None = None, review_days: int = REVIEW_DAYS) -> State:
     """statuses: claim id -> checked status (verified, uncommitted, mismatch ...)."""
     statuses = statuses or {}
 
@@ -161,7 +185,68 @@ def build(records: list[dict], statuses: dict[str, str] | None = None) -> State:
             it.status, it.by, it.why = "done", "you", r.get("note")
         elif op == "reopen":
             it.status, it.by, it.why = ("open" if it.kind == "thread" else "active"), None, None
-    return State(decisions, threads)
+        elif op == "confirm" and it.kind != "thread":
+            it.ts = max(it.ts, r.get("ts") or "")  # "still true" counts as saying it again
+
+    # 5. Shelf life: a rule nobody has repeated or confirmed in a while may have quietly stopped being true.
+    now = _now()
+    for d in decisions:
+        t = _epoch(d.ts)
+        if t is not None:
+            d.age_days = max(0, int((now - t) // 86400))
+            d.due = d.status == "active" and d.age_days > review_days
+    return State(decisions, threads, stats(records))
+
+
+def stats(records: list[dict]) -> dict:
+    """What the checks flagged over the whole ledger, counted once each. "Flagged" means it didn't match git
+    (or the pinned tests) when checked; some of those are later hand edits, not agent mistakes."""
+    claims = {r["id"]: r for r in records if r.get("kind") == "claim"}
+    mismatch, missing, orphans = set(), set(), set()
+    for r in records:
+        if r.get("kind") != "check":
+            continue
+        for f in r.get("findings") or []:
+            if r.get("status") == "orphan" and f.get("code") == "no_claim":
+                orphans.add(f.get("path"))
+            elif f.get("code") == "count_mismatch":
+                mismatch.add((r.get("entry"), f.get("path")))
+            elif f.get("code") == "claimed_not_found":
+                missing.add((r.get("entry"), f.get("path")))
+    latest_test: dict[str, dict] = {}
+    for r in records:
+        if r.get("kind") == "test_run" and r.get("claim"):
+            latest_test[r["claim"]] = r
+    test_claims = [cid for cid, c in claims.items() if c.get("tests_claimed")]
+    return {
+        "claims": len(claims),
+        "files_claimed": sum(len(c.get("files") or []) for c in claims.values()),
+        "claims_flagged": len({e for e, _ in mismatch | missing}),
+        "count_mismatch": len(mismatch),
+        "not_on_disk": len(missing),
+        "unclaimed_changes": len(orphans),
+        "tests_claimed": len(test_claims),
+        "tests_confirmed": sum(1 for cid in test_claims if latest_test.get(cid, {}).get("ok") is True),
+        "tests_contradicted": sum(1 for cid in test_claims if latest_test.get(cid, {}).get("ok") is False),
+    }
+
+
+def _n(k: int, one: str, many: str | None = None) -> str:
+    return f"{k} {one if k == 1 else (many or one + 's')}"
+
+
+def render_stats(n: dict) -> list[str]:
+    unchecked = n["tests_claimed"] - n["tests_confirmed"] - n["tests_contradicted"]
+    return [
+        f"- {_n(n['claims'], 'session claim')} read, covering {_n(n['files_claimed'], 'file edit')}",
+        f"- {_n(n['claims_flagged'], 'claim')} flagged: {_n(n['count_mismatch'], 'line count')} that didn't match git, "
+        f"{_n(n['not_on_disk'], 'edit')} claimed but not on disk",
+        f"- {_n(n['unclaimed_changes'], 'changed file')} no session claimed",
+        f"- {_n(n['tests_claimed'], chr(39) + 'tests pass' + chr(39) + ' claim')}: {n['tests_confirmed']} confirmed by your "
+        f"pinned tests, {n['tests_contradicted']} contradicted, {unchecked} not checked",
+        "- Flagged means it didn't match git or the pinned tests when checked. Some are later hand edits, "
+        "not agent mistakes; the ledger has each case.",
+    ]
 
 
 def render(st: State) -> str:
@@ -174,6 +259,11 @@ def render(st: State) -> str:
     act = st.active()
     L.append(f"## Decisions and preferences in force ({len(act)})")
     L += [f"- `{d.id}` {q(d.text)} ({', '.join(d.tools)}, {d.ts[:10]})" for d in reversed(act)] or ["- none yet"]
+    due = [d for d in act if d.due]
+    if due:
+        L += ["", f"## Due for review ({len(due)}): not said or confirmed for over {REVIEW_DAYS} days"]
+        L += [f"- `{d.id}` {d.age_days} days: {q(d.text)}" for d in due]
+        L.append("Still true: `ghostkeep confirm <id>`. Not any more: `ghostkeep retire <id>`.")
     L += ["", f"## Open threads ({len(st.open_threads())})"]
     L += [f"- `{t.id}` {t.tools[0]} {t.ts[:16].replace('T', ' ')}: {q(t.text)}"
           + (f" · files: {', '.join(t.files)}" if t.files else "") for t in reversed(st.open_threads())] or ["- none"]
@@ -186,6 +276,8 @@ def render(st: State) -> str:
     if done:
         L += ["", f"## Finished threads ({len(done)})"]
         L += [f"- `{t.id}` {q(t.text)}: {t.why or 'done'}" for t in reversed(done[-10:])]
+    if st.stats:
+        L += ["", "## What Ghostkeep flagged so far"] + render_stats(st.stats)
     return "\n".join(L) + "\n"
 
 

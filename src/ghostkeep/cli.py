@@ -159,6 +159,17 @@ def cmd_setup(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stats(a: argparse.Namespace) -> int:
+    root = _root()
+    n = state.stats(ledger.read(root))
+    if a.json:
+        print(json.dumps(n, indent=2))
+    else:
+        print(f"ghostkeep stats ({root})")
+        print("\n".join(state.render_stats(n)))
+    return 0
+
+
 def cmd_pin_test(a: argparse.Namespace) -> int:
     root = _root()
     ledger.init(root)
@@ -224,7 +235,7 @@ def cmd_change(a: argparse.Namespace) -> int:
             print(f"no decision with id {a.new!r}", file=sys.stderr)
             return 2
         by = new.id
-    if a.op in ("retire", "supersede") and it.kind == "thread" or a.op == "done" and it.kind != "thread":
+    if a.op in ("retire", "supersede", "confirm") and it.kind == "thread" or a.op == "done" and it.kind != "thread":
         print(f"`{a.op}` doesn't apply to a {it.kind}", file=sys.stderr)
         return 2
     state.record(root, a.op, it.id, by=by, note=a.note)
@@ -291,6 +302,10 @@ def main(argv: list[str] | None = None) -> int:
     su.add_argument("--no-agents-md", action="store_true", help="don't touch AGENTS.md")
     su.set_defaults(fn=cmd_setup)
 
+    stt = sub.add_parser("stats", help="what the checks have flagged so far in this project")
+    stt.add_argument("--json", action="store_true")
+    stt.set_defaults(fn=cmd_stats)
+
     pt = sub.add_parser("pin-test", help="pin the test command used to check 'tests pass' claims")
     pt.add_argument("command", nargs="?", help='e.g. "python -m pytest -q" (quote it)')
     pt.add_argument("--timeout", type=int, default=verify.DEFAULT_TIMEOUT, help="seconds (default 300)")
@@ -309,7 +324,8 @@ def main(argv: list[str] | None = None) -> int:
         .set_defaults(fn=cmd_state)
     for op, hlp in (("retire", "a decision or preference no longer holds"),
                     ("supersede", "a decision was replaced by a newer one"),
-                    ("done", "an open thread is finished"), ("reopen", "undo retire/supersede/done")):
+                    ("done", "an open thread is finished"), ("reopen", "undo retire/supersede/done"),
+                    ("confirm", "a decision is still true (resets its shelf life)")):
         c = sub.add_parser(op, help=hlp)
         c.add_argument("id", help="id from `ghostkeep state` (a unique prefix is enough)")
         if op == "supersede":

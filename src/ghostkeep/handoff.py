@@ -89,7 +89,8 @@ def build(root: Path, results: list[check.Result] | None = None, n_sessions: int
     if act:
         L.append("## Decisions and preferences in force (user's words)")
         for d in act[::-1][:MAX_DECISIONS]:
-            L.append(f"- {quote(d.text, 200)} ({', '.join(d.tools[::-1])}, {_short(d.ts)})")
+            L.append(f"- {quote(d.text, 200)} ({', '.join(d.tools[::-1])}, {_short(d.ts)})"
+                     + (f" · {d.age_days} days old, not confirmed since: check it still holds" if d.due else ""))
         if len(act) > MAX_DECISIONS:
             L.append(f"- \u2026and {len(act) - MAX_DECISIONS} more in force: see `.ghostkeep/STATE.md`")
         if st.replaced():

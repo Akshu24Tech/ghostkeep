@@ -83,6 +83,7 @@ def run_case(fn):
                 lines[0] = lines[0].replace('"v": 1', '"v": 1, "edited": true', 1)
                 lp.write_text("\n".join(lines) + "\n", encoding="utf-8")
             text = handoff.build(w.repo, results)
+            state_md = state.render(state.build(ledger.read(w.repo), {r.entry: r.status for r in results if r.entry}))
             gone = [p for p in label.get("absent_files", []) if (w.repo / p).exists()]
             if gone:
                 raise AssertionError(f"files that must not exist were created: {gone}")
@@ -93,7 +94,7 @@ def run_case(fn):
         verdicts, orphans = actual_verdicts(results)
         return label, {
             "claims": {c.session: c for c in ledger.claims(records)},
-            "verdicts": verdicts, "orphans": orphans, "handoff": text, "ledger": raw_ledger,
+            "verdicts": verdicts, "orphans": orphans, "handoff": text, "ledger": raw_ledger, "state": state_md,
             "decisions": [r["text"] for r in records if r.get("kind") in ("decision", "preference")],
         }, None
 
@@ -184,6 +185,8 @@ def score(name, label, obs, t: Tally, counts: dict):
         counts["superseded_leak"] += leaked
         if leaked:
             t.fail["superseded_leak"].append(f"{name}: replaced decision still shown: {s!r}")
+    for s in label.get("state_has", []):
+        t.hit("handoff_facts", s in obs["state"], name, f"STATE.md lacks {s!r}")
     for s in label.get("handoff_lacks", []):
         t.hit("handoff_facts", s not in text, name, f"handoff should not contain {s!r}")
     for s in label.get("handoff_once", []):  # once in the Decisions section

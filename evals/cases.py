@@ -695,3 +695,47 @@ def test_claim_in_a_session_with_no_edits_is_still_checked(w):
     _pin(w, "print('11 passed in 9.1s')")
     return {"capture": False, "run_tests": True,
             "handoff_has": ["no file changes", "the agent says they pass;", "11 passed"]}
+
+
+# ---------------------------------------------------------------- shelf life and flag counts (clock pinned 2026-11-20)
+
+def _said(w, sid, words, ts):
+    w.claude_session(sid, [c_user(words, ts=ts), c_say("Noted.", ts=ts)])
+
+
+@case("shelflife")
+def old_decision_is_flagged_for_review(w):
+    seed(w)
+    _said(w, "o1", "Let's use Flask for the API.", "2026-09-01T10:00:00Z")
+    _said(w, "o2", "We always run the tests before committing.", "2026-11-15T10:00:00Z")
+    return {"capture": False, "in_force": ["Let's use Flask for the API.", "We always run the tests before committing."],
+            "handoff_has": ['Flask for the API." (claude-code, 2026-09-01 10:00) · 80 days old'],
+            "state_has": ["## Due for review (1)", "80 days: \"Let's use Flask for the API.\""]}
+
+
+@case("shelflife")
+def repeating_or_confirming_resets_shelf_life(w):
+    seed(w)
+    _said(w, "r1", "Let's use Flask for the API.", "2026-09-01T10:00:00Z")
+    _said(w, "r2", "Let's use Flask for the API.", "2026-11-18T10:00:00Z")  # said again: fresh
+    _said(w, "r3", "We never use paid APIs in this project.", "2026-08-01T10:00:00Z")
+    return {"capture": False, "events": [("confirm", "paid APIs", None)],
+            "in_force": ["Let's use Flask for the API.", "We never use paid APIs in this project."],
+            "handoff_lacks": ["days old"], "state_has": ["## Decisions and preferences in force (2)"]}
+
+
+@case("shelflife")
+def flag_counts_add_up(w):
+    """One overclaimed edit, one change nobody claimed, one false 'tests pass': each counted once."""
+    seed(w)
+    w.ag_session("ide", "f1", [ag_user('Add one line to docs/RESULTS.md.', w.repo),
+                               ag_edit(w.abs("docs/RESULTS.md"), "Next: run the evals.",
+                                       "Next: run the evals.\nit is completed"),
+                               ag_say("Added the line. All tests pass.")])
+    w.write("docs/RESULTS.md", BASE_RESULTS + "it is completed\nmore\nlines\n")
+    w.write("stray.txt", "x\n")
+    _pin(w, "print('1 passed, 1 failed'); sys.exit(1)")
+    return {"capture": False, "run_tests": True,
+            "state_has": ["1 claim flagged: 1 line count that didn't match git, 0 edits claimed but not on disk",
+                          "1 changed file no session claimed",
+                          "1 'tests pass' claim: 0 confirmed by your pinned tests, 1 contradicted, 0 not checked"]}

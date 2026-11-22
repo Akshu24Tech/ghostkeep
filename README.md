@@ -11,7 +11,7 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.6.0 (checked "tests pass" claims, tamper-evident ledger), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> Status: v0.7.0 (flag counts, decision shelf life), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
@@ -107,6 +107,17 @@ message or the repo. The session-start hook never runs tests, so sessions start 
 result. What it can't do: it checks the files as they are now, not as they were when the agent spoke, and
 it only sees claims in the agent's last message.
 
+## How much it catches, and decisions that go stale
+
+`ghostkeep stats` (also at the end of `STATE.md`) counts, once each, what the checks flagged in this project:
+claims whose line counts didn't match git, edits claimed but not on disk, changed files nobody claimed, and
+"tests pass" claims your pinned tests confirmed or contradicted. "Flagged" is not "the agent lied": a later
+hand edit can cause a flag too, and the ledger keeps each case so you can look.
+
+A decision nobody has repeated or confirmed for 30 days is marked in the handoff ("80 days old, not confirmed
+since") and listed under *Due for review* in `STATE.md`. `ghostkeep confirm <id>` says it still holds,
+`ghostkeep retire <id>` says it doesn't. Saying the same words again in any tool also resets it.
+
 ## Tamper-evident ledger
 
 Each ledger line carries the hash of the line before it. Edit or delete an old line and `doctor` (and the
@@ -174,7 +185,7 @@ and decision/preference capture from the user's own words.
 
 ```bash
 python -m pytest -q          # unit tests
-python evals/run.py          # 46 labeled cases scored on 17 metrics, writes evals/RESULTS.md
+python evals/run.py          # 50 labeled cases scored on 17 metrics, writes evals/RESULTS.md
 python evals/run.py --gate   # exit 1 if any metric is below target (what CI runs)
 python evals/label_real.py   # label Ghostkeep's output on your own sessions, then --score
 ```

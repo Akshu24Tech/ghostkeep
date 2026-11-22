@@ -38,6 +38,7 @@ class World:
             "GHOSTKEEP_CLAUDE_DIR": str(home / ".claude/projects"),
             "GHOSTKEEP_ANTIGRAVITY_DIRS": f"antigravity-ide={self.ide};antigravity-cli={self.cli}",
             "GHOSTKEEP_CODEX_DIR": str(self.codex),
+            "GHOSTKEEP_NOW": "2026-11-20T12:00:00+00:00",  # a fixed clock: decision ages don't drift
         }
 
     # --- repo ---------------------------------------------------------------------

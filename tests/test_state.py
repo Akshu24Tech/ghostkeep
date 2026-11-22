@@ -41,3 +41,21 @@ def test_ledger_stays_append_only(tmp_path, monkeypatch):
     before = ledger.ledger_path(root).read_text()
     cli.main(["retire", "d_0"])
     assert ledger.ledger_path(root).read_text().startswith(before)
+
+
+def test_confirm_and_stats_cli(tmp_path, monkeypatch, capsys):
+    import json
+    root = _repo(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("GHOSTKEEP_NOW", "2027-01-01T00:00:00+00:00")
+    st = state.build(ledger.read(root))
+    assert all(d.due for d in st.active())  # both decisions are from Nov 2026
+    monkeypatch.setattr(state, "now", lambda: "2026-12-31T00:00:00+00:00")  # the day the user confirms
+    assert cli.main(["confirm", "d_1"]) == 0
+    due = {d.id: d.due for d in state.build(ledger.read(root)).active()}
+    assert due == {"d_0": True, "d_1": False}
+    capsys.readouterr()
+    assert cli.main(["stats", "--json"]) == 0
+    n = json.loads(capsys.readouterr().out)
+    assert n["claims"] == 0 and n["tests_claimed"] == 0
+    assert cli.main(["done", "d_0"]) == 2 and cli.main(["confirm", "nope"]) == 2
