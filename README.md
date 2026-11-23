@@ -4,7 +4,7 @@ Verified handoffs between free AI coding tools.
 
 [![tests](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/ci.yml/badge.svg)](https://github.com/Akshu24Tech/ghostkeep/actions/workflows/ci.yml)
 
-![Ghostkeep demo: one command reads every tool's session log and checks each claim against git](docs/demo.gif)
+![Ghostkeep demo: one command reads every tool's session log and checks each claim against git](https://raw.githubusercontent.com/Akshu24Tech/ghostkeep/main/docs/demo.gif)
 
 When you switch from Claude Code to Antigravity CLI (limit hit, missing feature, second opinion),
 the files carry over but the story doesn't. The next agent can't tell what was asked, who changed
@@ -15,36 +15,34 @@ ledger per project and checks every claim against git, with no LLM, no API key a
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
-## Install and run
+## Quickstart (2 minutes)
 
-Needs Python 3.10+. No dependencies, no server, no API key.
+Needs Python 3.10+ and git. No dependencies, no server, no API key.
 
 ```bash
-# run it once, nothing to install (needs uv)
-uvx --from git+https://github.com/Akshu24Tech/ghostkeep ghostkeep handoff
-
-# or install the command
-pipx install git+https://github.com/Akshu24Tech/ghostkeep
-# or
-pip install git+https://github.com/Akshu24Tech/ghostkeep
-
-# reading Codex's older compressed (.zst) sessions is an optional extra
-pipx install "ghostkeep[codex] @ git+https://github.com/Akshu24Tech/ghostkeep"
+pip install ghostkeep          # or: pipx install ghostkeep, or: uv tool install ghostkeep
+cd your-project
+ghostkeep setup                # the handoff now loads itself when a session starts
+ghostkeep doctor               # every tool's logs read? did each hook run?
 ```
 
+Then work as usual and switch tools whenever you hit a limit. Each new Antigravity, Gemini CLI or Claude Code
+session starts with the handoff; Codex is pointed to it through `AGENTS.md`. To write it by hand at any time:
+
 ```bash
-cd your-project
 ghostkeep handoff            # read session logs, check claims against git, write .ghostkeep/HANDOFF.md
 ```
 
-Then tell the next agent: "Read .ghostkeep/HANDOFF.md first." For a browser chat, paste the file in.
+**Windows:** if `ghostkeep` isn't found after `pip install`, Python's Scripts folder isn't on your PATH.
+Use `py -m ghostkeep` in place of `ghostkeep` (for example `py -m ghostkeep setup`), or install with pipx.
+`py -m ghostkeep --version` shows which version you have.
 
-Or set it up once per project so you don't have to ask:
+Latest unreleased version: `pip install git+https://github.com/Akshu24Tech/ghostkeep`. Reading Codex's older
+compressed (`.zst`) sessions is an optional extra: `pip install "ghostkeep[codex]"`.
 
-```bash
-ghostkeep setup     # session-start hooks for the tools installed on this machine, plus an AGENTS.md block
-ghostkeep doctor    # is every tool's log being read? did each hook actually run?
-```
+For a browser chat, paste `.ghostkeep/HANDOFF.md` in yourself.
+
+### What `ghostkeep setup` writes
 
 | Tool | How the handoff reaches it | Config written |
 | --- | --- | --- |
@@ -161,7 +159,7 @@ sessions. A long real-world run is still to come.
 | `superseded` | A later session changed the same file |
 
 The accept/reject click in an IDE isn't recorded in any session log, so git is the ground truth.
-See [docs/LEDGER.md](docs/LEDGER.md) for the ledger format.
+See [docs/LEDGER.md](https://github.com/Akshu24Tech/ghostkeep/blob/main/docs/LEDGER.md) for the ledger format.
 
 ## Why
 
@@ -176,7 +174,7 @@ interrupted file, and continued without being re-told.
 ## Earlier version
 
 The v2.1 "Claims Register" prototype (watcher, extractor, auditor, MCP server) is kept on the
-[`legacy`](../../tree/legacy) branch and in this repo's history. v0.1 restarts the code around one
+[`legacy`](https://github.com/Akshu24Tech/ghostkeep/tree/legacy) branch and in this repo's history. v0.1 restarts the code around one
 narrower job: checking agent claims about their own work at the moment you switch tools. Ideas
 carried over: append-only log, the writer never sets its own status, deterministic checks only,
 and decision/preference capture from the user's own words.
@@ -194,6 +192,6 @@ The eval cases are small fake projects with session logs in each tool's real for
 written down: claimed files and line counts, verdicts, orphans, who changed what, decisions captured,
 unfinished work first, plus adversarial cases (planted instructions in an agent's message, secrets,
 malformed logs, sessions from another repo). Cases in the `realdata` group reproduce bugs found by
-labeling real sessions. Latest numbers: [evals/RESULTS.md](evals/RESULTS.md).
+labeling real sessions. Latest numbers: [evals/RESULTS.md](https://github.com/Akshu24Tech/ghostkeep/blob/main/evals/RESULTS.md).
 How Ghostkeep scores against an agentic system design review, and what's left:
-[docs/DESIGN_AUDIT.md](docs/DESIGN_AUDIT.md).
+[docs/DESIGN_AUDIT.md](https://github.com/Akshu24Tech/ghostkeep/blob/main/docs/DESIGN_AUDIT.md).
