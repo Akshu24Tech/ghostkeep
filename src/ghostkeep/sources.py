@@ -39,7 +39,7 @@ def redact(text: str) -> str:
 
 def clip(text: str, n: int = MAX_TEXT) -> str:
     text = redact(" ".join(text.split()))
-    return text if len(text) <= n else text[: n - 1] + "…"
+    return text if len(text) <= n else text[: n - 1] + "..."
 
 
 def line_delta(old: str, new: str) -> tuple[int, int]:
@@ -193,7 +193,7 @@ def read_claude(path: Path, root: Path) -> Session:
                 if item.get("type") != "tool_use":
                     continue
                 name, inp = item.get("name"), item.get("input") or {}
-                if name == "Bash" and isinstance(inp.get("command"), str):
+                if name in ("Bash", "PowerShell") and isinstance(inp.get("command"), str):
                     found = shell_edits(inp["command"], root)  # rm, > redirects, Set-Content ...
                     if found:
                         s.touches_root = True
@@ -276,6 +276,7 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
     sid = path.parents[2].name  # brain/<id>/.system_generated/logs/transcript.jsonl
     s = Session(tool, sid, str(path), f"{st.st_size}:{int(st.st_mtime)}")
     last_status = None
+    answered = False  # a text-only answer came after the last user request
     pending: list[Edit] = []  # edits from the last tool call, waiting for the tool's own result line
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
@@ -290,6 +291,7 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
             s.ended = ts
         last_status = o.get("status") or last_status
         if t == "USER_INPUT":
+            answered = False
             text = _ag_request(o.get("content", ""))
             if text:
                 s.prompts.append((ts, text))
@@ -307,6 +309,7 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
         elif t == "PLANNER_RESPONSE":
             if (o.get("content") or "").strip() and not o.get("tool_calls"):
                 s.final = o["content"]
+                answered = True
             pending = []
             truncated = set(o.get("truncated_fields") or [])
             if "tool_calls" in truncated:  # real data: whole tool_calls cut at 2,048 chars
@@ -335,6 +338,11 @@ def read_antigravity(path: Path, tool: str, root: Path) -> Session:
     if last_status and last_status != "DONE":
         s.interrupted = True
         s.status_note = f"last step status {last_status}"
+    elif s.prompts and not answered:
+        # Real trial (27 Nov): `agy --print --print-timeout` cut a turn off. Every logged step said DONE, but the
+        # log ends on a tool result with no final answer after the last request.
+        s.interrupted = True
+        s.status_note = "no final answer after the last request"
     return s
 
 

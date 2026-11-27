@@ -102,6 +102,13 @@ def check_claim(root: Path, claim: Claim, newest_for: dict[str, str], dirty: dic
             findings.append(Finding(f.path, "claimed_not_found", f.expected(), "no change"))
             continue
         a, r = actual
+        if dirty.get(f.path) == "??" and f.removed and r == 0:
+            # Real trial (27 Nov): Antigravity edited todo.py, a file Claude had created but nobody committed.
+            # git has no earlier version, so the diff is the whole file (+75 -0) and the agent's +28 -17 can't be
+            # checked. Say so instead of calling it a mismatch.
+            any_uncommitted = True
+            findings.append(Finding(f.path, "untracked_edit", f.expected(), _fmt(a, r)))
+            continue
         # What the file should show: this session's own counts, or, when earlier sessions edited the
         # same uncommitted file from the same commit, the sum of every session's counts.
         options = [(f.added, f.removed)]

@@ -709,7 +709,7 @@ def old_decision_is_flagged_for_review(w):
     _said(w, "o1", "Let's use Flask for the API.", "2026-09-01T10:00:00Z")
     _said(w, "o2", "We always run the tests before committing.", "2026-11-15T10:00:00Z")
     return {"capture": False, "in_force": ["Let's use Flask for the API.", "We always run the tests before committing."],
-            "handoff_has": ['Flask for the API." (claude-code, 2026-09-01 10:00) · 80 days old'],
+            "handoff_has": ['Flask for the API." (claude-code, 2026-09-01 10:00) | 80 days old'],
             "state_has": ["## Due for review (1)", "80 days: \"Let's use Flask for the API.\""]}
 
 
@@ -739,3 +739,34 @@ def flag_counts_add_up(w):
             "state_has": ["1 claim flagged: 1 line count that didn't match git, 0 edits claimed but not on disk",
                           "1 changed file no session claimed",
                           "1 'tests pass' claim: 0 confirmed by your pinned tests, 1 contradicted, 0 not checked"]}
+
+
+# ---------------------------------------------------------------- found by the stranger trial (27 Nov)
+
+@case("realdata")
+def second_tool_edits_a_file_nobody_committed(w):
+    """Claude created todo.py, nobody committed it, Antigravity CLI then edited it (+28 -17). git has no earlier
+    version, so the diff is the whole file; that was reported as DOES NOT MATCH."""
+    seed(w)
+    first = "def a():\n    return 1\n\ndef b():\n    return 2\n"
+    second = "def a():\n    return 1\n\ndef b():\n    return 3\n\ndef c():\n    return 4\n"
+    w.claude_session("t1", [c_user("create todo.py"), c_write(w.abs("todo.py"), first), c_say("Created todo.py.")])
+    w.ag_session("cli", "t2", [ag_user("change b and add c in todo.py", w.repo, ts="2026-11-10T16:30:00Z"),
+                               ag_edit(w.abs("todo.py"), "def b():\n    return 2",
+                                       "def b():\n    return 3\n\ndef c():\n    return 4", ts="2026-11-10T16:31:00Z"),
+                               ag_say("Changed b and added c.", ts="2026-11-10T16:32:00Z")])
+    w.write("todo.py", second)
+    return {"capture": False, "verdicts": {("t2", "todo.py"): "uncommitted"},
+            "handoff_has": ["not committed yet, so git has no earlier version"], "handoff_lacks": ["DOES NOT MATCH"]}
+
+
+@case("realdata")
+def antigravity_turn_cut_off_without_an_answer(w):
+    """`agy --print --print-timeout 25s`: every logged step says DONE, but the log ends on a tool result with
+    no final answer. It was dropped; it is unfinished work."""
+    seed(w)
+    w.ag_session("cli", "cut", [ag_user("Add search, clear and export commands to todo.py with tests.", w.repo),
+                                ag("PLANNER_RESPONSE", ts="2026-11-10T15:30:30Z", tool_calls=[
+                                    {"name": "read_file", "args": {"Path": w.abs("README.md")}}]),
+                                ag("GENERIC", ts="2026-11-10T15:30:40Z", content="file contents ...")])
+    return {"capture": False, "unfinished": {"tool": "antigravity-cli", "file": "none yet"}}

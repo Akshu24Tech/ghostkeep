@@ -25,7 +25,8 @@ KNOWN_HEADERS = {"# Handoff", "## Unfinished", "## Recent sessions", "## Uncommi
                  "## Decisions and preferences in force (user's words)",
                  "## Warnings (this handoff may be incomplete)"}
 CODE_TO_VERDICT = {"claimed_not_found": "not_on_disk", "count_mismatch": "mismatch",
-                   "untracked": "uncommitted", "not_committed": "uncommitted", "outside_git": "unchecked", "changed_later": "superseded"}
+                   "untracked": "uncommitted", "not_committed": "uncommitted", "outside_git": "unchecked", "changed_later": "superseded",
+                   "untracked_edit": "uncommitted"}
 
 # metric -> (target, lower_is_better)
 TARGETS = {

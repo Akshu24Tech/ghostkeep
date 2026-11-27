@@ -266,7 +266,7 @@ def render(st: State) -> str:
         L.append("Still true: `ghostkeep confirm <id>`. Not any more: `ghostkeep retire <id>`.")
     L += ["", f"## Open threads ({len(st.open_threads())})"]
     L += [f"- `{t.id}` {t.tools[0]} {t.ts[:16].replace('T', ' ')}: {q(t.text)}"
-          + (f" · files: {', '.join(t.files)}" if t.files else "") for t in reversed(st.open_threads())] or ["- none"]
+          + (f" | files: {', '.join(t.files)}" if t.files else "") for t in reversed(st.open_threads())] or ["- none"]
     rep = st.replaced()
     if rep:
         L += ["", f"## Replaced or retired ({len(rep)}, kept for history)"]

@@ -103,7 +103,8 @@ def cmd_handoff(a: argparse.Namespace) -> int:
     root = _root()
     text = _handoff(root, a)
     print(text)
-    print(f"(written to {ledger.LEDGER_DIR}/HANDOFF.md)", file=sys.stderr)
+    if sys.stderr.isatty():  # a redirected stderr line shows up as an error in Windows PowerShell 5
+        print(f"(written to {ledger.LEDGER_DIR}/HANDOFF.md)", file=sys.stderr)
     return 0
 
 

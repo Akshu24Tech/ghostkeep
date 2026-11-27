@@ -11,7 +11,7 @@ the files carry over but the story doesn't. The next agent can't tell what was a
 what, or whether the last agent's claimed work actually happened. Ghostkeep keeps one append-only
 ledger per project and checks every claim against git, with no LLM, no API key and no server.
 
-> Status: v0.7.0 (flag counts, decision shelf life), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
+> Status: v0.7.1 (flag counts, decision shelf life), early and improving. Automatic capture from Claude Code, Antigravity (IDE + CLI) and Codex session logs,
 > claims checked against git, decisions captured in your own words, and `ghostkeep handoff`.
 > Tests and a labeled eval gate run on Windows, macOS and Linux on every push.
 
@@ -183,7 +183,7 @@ and decision/preference capture from the user's own words.
 
 ```bash
 python -m pytest -q          # unit tests
-python evals/run.py          # 50 labeled cases scored on 17 metrics, writes evals/RESULTS.md
+python evals/run.py          # 52 labeled cases scored on 17 metrics, writes evals/RESULTS.md
 python evals/run.py --gate   # exit 1 if any metric is below target (what CI runs)
 python evals/label_real.py   # label Ghostkeep's output on your own sessions, then --score
 ```
